@@ -1,0 +1,35 @@
+{
+  "$schema": "node_modules/@ztools-center/ztools-api-types/resource/ztools.schema.json",
+  "name": "mhxy-zdream-toolbox",
+  "title": "梦幻西游工具箱",
+  "description": "多开玩家财务记账：梦幻币收支、点卡/RMB、藏宝阁交易、在线状态与看板统计。数据仅存本地。",
+  "author": "ZDream",
+  "version": "0.1.0",
+  "main": "index.html",
+  "preload": "preload/services.js",
+  "logo": "logo.png",
+  "development": {
+    "main": "http://localhost:5173"
+  },
+  "features": [
+    {
+      "code": "toolbox",
+      "explain": "打开梦幻西游工具箱 · 看板 / 记账 / 藏宝阁",
+      "icon": "logo.png",
+      "cmds": [
+        "梦幻西游工具箱",
+        "梦幻西游",
+        "mhxy",
+        "记账",
+        "藏宝阁",
+        "zdream"
+      ]
+    },
+    {
+      "code": "quick-record",
+      "explain": "快捷记账浮窗（游戏收支快速录入）",
+      "icon": "logo.png",
+      "cmds": ["快捷记账", "秒记", "mhxy记"]
+    }
+  ]
+}

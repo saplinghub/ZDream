@@ -1,0 +1,66 @@
+# =============================================================================
+# 示例：Tauri 2 双端发版（Windows + macOS）
+# 使用前：
+#   1. 工程已接入 Tauri 2（存在 src-tauri/）
+#   2. 复制本文件为 release-tauri.yml
+#   3. 按实际 tauri.conf 产物路径修改 upload 的 path
+#   4. package.json 提供 "tauri": "tauri" 或 npx tauri
+# =============================================================================
+name: Release Tauri
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: ""
+          - platform: windows-latest
+            args: ""
+          # 若需 Apple Silicon 与 Intel 分开，可再拆 matrix
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      # 需要已安装 @tauri-apps/cli 依赖
+      - name: Build Tauri
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "梦金囊 ${{ github.ref_name }}"
+          releaseBody: "请查看 Release 说明。未签名安装包可能被系统拦截，属预期。"
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}

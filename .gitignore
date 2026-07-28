@@ -1,0 +1,50 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Dependencies & build
+node_modules
+dist
+dist-ssr
+*.local
+
+# Tauri / Rust
+src-tauri/target
+src-tauri/WixTools
+src-tauri/gen/schemas
+
+# Local data & secrets
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.pfx
+*.key
+secrets/
+certificates/
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+coverage
+*.lcov
+.tauri
