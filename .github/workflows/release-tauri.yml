@@ -17,7 +17,9 @@ jobs:
       matrix:
         include:
           - platform: macos-latest
+            args: ""
           - platform: windows-latest
+            args: ""
 
     runs-on: ${{ matrix.platform }}
 
@@ -42,18 +44,37 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build Tauri
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build Tauri (verbose)
+        shell: bash
+        run: |
+          set -o pipefail
+          npx tauri build --verbose 2>&1 | tee tauri-build.log
+        continue-on-error: true
+        id: build
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          projectPath: .
-          tagName: ${{ github.ref_type == 'tag' && github.ref_name || format('dev-{0}', github.sha) }}
-          releaseName: 梦金囊 ${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
-          releaseBody: |
-            自动构建产物（未代码签名）。
-            - Windows：安装包可能被 SmartScreen 拦截，选择仍要运行即可。
-            - macOS：未公证时需在「隐私与安全性」中允许打开。
-          releaseDraft: true
-          prerelease: true
-          args: ""
+          name: tauri-build-log-${{ matrix.platform }}
+          path: tauri-build.log
+          if-no-files-found: ignore
+
+      - name: Upload bundles
+        if: steps.build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: zdream-${{ matrix.platform }}
+          path: |
+            src-tauri/target/release/bundle
+            src-tauri/target/release/*.exe
+            src-tauri/target/release/zdream
+            src-tauri/target/release/zdream.exe
+          if-no-files-found: warn
+
+      - name: Fail if build failed
+        if: steps.build.outcome != 'success'
+        run: |
+          echo "Tauri build failed. See artifact tauri-build-log-${{ matrix.platform }}"
+          tail -n 100 tauri-build.log || true
+          exit 1
