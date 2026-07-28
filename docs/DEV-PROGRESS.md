@@ -10,13 +10,14 @@
 | 0 | 工程骨架 + 进度文档 | ✅ | Vue3/Vite5/TS、主题、壳布局 |
 | 1 | P0 MVP 核心闭环 | ✅ | 账号/记账/藏宝阁/看板/导入导出可运行 |
 | 1.5 | ZTools 插件改造（历史） | ⏸ | 已决定不做正式运行目标；代码残留待清 |
-| 1.6 | GitHub / CI / 发版规划 | ✅ | 见 GITHUB-RELEASE-PLAN.md、.github/workflows |
-| 2 | **Tauri 2 桌面壳 + SQLite** | ⬜ | 下一期代码；Win+Mac |
-| 3 | P1 增强 | 🔶 | 动态/浮窗等已有雏形 |
-| 4 | P2 + 视觉打磨 + 签名发版 | ⬜ | |
+| 1.6 | GitHub / CI / 发版规划 | ✅ | GITHUB-RELEASE-PLAN + workflows |
+| 2 | **Tauri 2 桌面壳 + SQLite** | ✅ | src-tauri、desktop 适配、kv schema；CI 双端发版 |
+| 2.1 | 清 ZTools 残留 | ✅ | 无 plugin.json/preload/ztools 运行依赖 |
+| 3 | P1 / 托盘 / 全局快捷键注册 | 🔶 | 插件已引入，注册逻辑后续 |
+| 4 | 签名发版 + 视觉打磨 | ⬜ | |
 
-**当前目标**：桌面化（Tauri 2 + SQLite）；工程仅 `ZDream`；GitHub + CI 发版。  
-**已弃用正式线**：`zTools/z-dream`、ZTools 插件作为运行目标。
+**当前目标**：用 GitHub Actions 打出 Win/Mac 安装包并内测。  
+**已弃用**：ZTools 插件运行线、`zTools/z-dream` 正式维护。
 
 **本地运行（目前为前端预览）**：
 
@@ -152,9 +153,11 @@ src/
 | 框架 | Vue 3 + Vite 5 + TypeScript 5.6 |
 | 状态 | Pinia |
 | 路由 | Vue Router 4 |
-| 存储 | localStorage（`mhxy-zdream:*` + `mhxy-theme`） |
+| 存储 | SQLite（桌面）/ localStorage（浏览器预览） |
 | 样式 | CSS 变量 Token |
 | 图表 | 自绘柱状 + 示意 SVG 折线 |
+| 壳 | Tauri 2 |
+| 发版 | GitHub Actions Win + macOS |
 
 ## 变更日志
 
@@ -165,17 +168,17 @@ src/
 | 2026-07-28 | **改造为 ZTools 插件**（历史尝试）：plugin.json、preload、dbStorage 等 |
 | 2026-07-28 | **转向桌面**：Tauri 2 + Vue + SQLite；弃用 z-dream/ZTools 正式线 |
 | 2026-07-28 | **GitHub 发版规划**：GITHUB-RELEASE-PLAN.md、ci-frontend.yml、release-tauri 示例、gitignore |
+| 2026-07-28 | **Tauri 2 接入**：src-tauri + SQLite kv + desktop 平台层；移除 ZTools；启用 release-tauri.yml；前端 build 通过 |
 
 
-## ZTools 接入
+
+## 桌面接入（Tauri）
 
 | 项 | 状态 | 说明 |
 |----|------|------|
-| `plugin.json` | ✅ | 根目录 + public（构建进 dist） |
-| `preload/services.js` | ✅ | 读写文件 |
-| `development.main` | ✅ | http://localhost:5173 |
-| `ztools.dbStorage` | ✅ | 经 platform 层，浏览器降级 localStorage |
-| `onPluginEnter` | ✅ | toolbox / quick-record |
-| 插件窗铺满布局 | ✅ | `.ztools-host` |
-| 生产 dist 安装 | ✅ | `npm run build` → 整包 dist |
-| 本机 ZTools 实机验证 | ⬜ | 需用户本机安装 ZTools 后加载 |
+| `src-tauri/` | ✅ | Tauri 2 壳 |
+| SQLite `zdream.db` + kv | ✅ | migrations/001_init.sql |
+| `platform/desktop.ts` | ✅ | 桌面/Web 双轨 |
+| 清 ZTools | ✅ | 无 plugin 运行依赖 |
+| `release-tauri.yml` | ✅ | tag / 手动双端构建 |
+| 本机 Rust / tauri dev | ⬜ | 后置；发版靠 CI |

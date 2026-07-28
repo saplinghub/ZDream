@@ -1,6 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 
-// Hash 路由：兼容 ZTools 以 file/插件目录加载 index.html
+// Hash 路由：兼容 file 协议与桌面 webview 加载
 const router = createRouter({
   history: createWebHashHistory(),
   routes: [

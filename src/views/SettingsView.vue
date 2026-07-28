@@ -3,7 +3,7 @@ import { reactive, ref } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { THEMES } from '@/theme/themes'
 import type { ItemCategory } from '@/types'
-import { openTextFile } from '@/platform/ztools'
+import { openTextFile } from '@/platform/desktop'
 
 const store = useAppStore()
 
@@ -58,7 +58,7 @@ async function onImport(e: Event) {
 async function onImportNative() {
   const text = await openTextFile()
   if (text == null) {
-    // 非 ZTools 或用户取消：触发隐藏 file input
+    // 桌面对话框取消或浏览器环境：触发隐藏 file input
     fileInput.value?.click()
     return
   }
@@ -222,7 +222,7 @@ async function onImportNative() {
           />
         </div>
         <div class="meta">
-          数据仅存本地（ZTools 用 dbStorage，浏览器用 localStorage）· 不上传云端 · 插件内 Ctrl+Shift+R
+          数据仅存本地（桌面 SQLite / 浏览器用 localStorage）· 不上传云端 · Ctrl+Shift+R
           呼出记账浮窗
         </div>
       </div>

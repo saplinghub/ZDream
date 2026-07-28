@@ -33,7 +33,7 @@ import {
   uid,
 } from '@/utils/format'
 import { applyThemeToDom, loadStoredTheme } from '@/theme/themes'
-import { saveTextFile } from '@/platform/ztools'
+import { saveTextFile } from '@/platform/desktop'
 
 const STORAGE = {
   accounts: 'accounts',

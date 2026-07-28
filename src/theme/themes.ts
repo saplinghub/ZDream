@@ -1,4 +1,4 @@
-import { platformGetItem, platformSetItem } from '@/platform/ztools'
+import { platformGetItemSync, platformSetItemSync } from '@/platform/desktop'
 
 export interface ThemeTokens {
   name: string
@@ -131,12 +131,12 @@ export function applyThemeToDom(key: string, customHex = '#3d9b6e') {
   root.style.setProperty('--accent', t.accent)
   root.style.setProperty('--accent-soft', `color-mix(in oklch, ${t.accent} 12%, transparent)`)
   root.style.setProperty('--fg-soft', `color-mix(in oklch, ${t.fg} 4%, transparent)`)
-  platformSetItem(THEME_STORAGE_KEY, { key, customHex })
+  platformSetItemSync(THEME_STORAGE_KEY, { key, customHex })
   return t
 }
 
 export function loadStoredTheme(): { key: string; customHex: string } {
-  const parsed = platformGetItem<{ key?: string; customHex?: string }>(THEME_STORAGE_KEY)
+  const parsed = platformGetItemSync<{ key?: string; customHex?: string }>(THEME_STORAGE_KEY)
   if (parsed) {
     return {
       key: parsed.key || 'mint',

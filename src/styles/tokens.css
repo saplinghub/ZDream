@@ -61,10 +61,13 @@ body {
   padding: 24px;
 }
 
-/* ZTools 宿主：铺满插件视图，去掉浏览器演示外边距 */
-html.ztools-host,
-body.ztools-host,
-body.ztools-host #app {
+/* 桌面宿主（Tauri）：铺满窗口客户区 */
+html.desktop-host,
+body.desktop-host,
+body.desktop-host #app,
+html.tauri-host,
+body.tauri-host,
+body.tauri-host #app {
   height: 100%;
   width: 100%;
   margin: 0;
@@ -73,7 +76,8 @@ body.ztools-host #app {
   background: var(--bg);
   overflow: hidden;
 }
-body.ztools-host .app-shell {
+body.desktop-host .app-shell,
+body.tauri-host .app-shell {
   width: 100% !important;
   height: 100% !important;
   max-width: none;

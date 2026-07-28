@@ -1,0 +1,58 @@
+# 双端桌面构建：tag v* 或手动触发
+name: Release Tauri
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+          - platform: windows-latest
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build Tauri
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || format('dev-{0}', github.sha) }}
+          releaseName: 梦金囊 ${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
+          releaseBody: |
+            自动构建产物（未代码签名）。
+            - Windows：安装包可能被 SmartScreen 拦截，选择仍要运行即可。
+            - macOS：未公证时需在「隐私与安全性」中允许打开。
+          releaseDraft: true
+          prerelease: ${{ github.ref_type != 'tag' }}
+          args: ""

@@ -1,43 +1,50 @@
-# 梦金囊 / 梦幻西游工具箱（ZDream）
+# 梦金囊（ZDream）
 
-多开玩家本地财务工具：**游戏收支 · 点卡/RMB · 藏宝阁 · 在线状态 · 看板**。
+梦幻西游多开本地财务工具：**游戏收支 · 点卡/RMB · 藏宝阁 · 在线 · 看板**。
 
-## 产品方向（已定）
+## 技术栈
 
-| 项 | 决定 |
+| 层 | 技术 |
 |----|------|
-| 形态 | **独立桌面应用**（非 ZTools 插件） |
-| 技术 | **Tauri 2 + Vue 3 + TypeScript + SQLite** |
-| 平台 | **Windows 为主**，**macOS 可开发/可发** |
-| 工程 | 仅本仓库；弃用 `zTools/z-dream` 正式线 |
-| 发版 | 源码 **GitHub**；安装包优先 **GitHub Actions** 双端构建 |
+| UI | Vue 3 · Vite · TypeScript · Pinia · Vue Router |
+| 桌面壳 | **Tauri 2** |
+| 存储 | **SQLite**（`tauri-plugin-sql`，`sqlite:zdream.db`） |
+| 发版 | GitHub Actions → Windows + macOS |
 
-> 当前：Vue 业务与 UI 可在 `npm run dev` 下预览。  
-> **Tauri 与 SQLite 尚未接入**。ZTools 残留将在桌面化时清理。
+浏览器 `npm run dev` 可预览 UI（localStorage）。完整桌面能力见 CI 安装包或本机 `tauri dev`。
 
-## 本地前端预览
+## 开发
 
 ```bash
 npm install
-npm run dev
+npm run dev          # 前端预览
+npm run build        # 前端构建
+npm run tauri:dev    # 桌面（需 Rust）
+npm run tauri:build  # 本机打安装包（需 Rust）
 ```
 
-```bash
-npm run build
+## 结构
+
+```
+src/                 Vue 业务
+src/platform/        Tauri / Web 双轨适配
+src-tauri/           壳 + SQLite 迁移
+.github/workflows/   前端 CI + 双端发版
+docs/                需求与进度
 ```
 
-## 文档
+## GitHub 发版
 
-| 文档 | 说明 |
-|------|------|
-| [docs/GITHUB-RELEASE-PLAN.md](docs/GITHUB-RELEASE-PLAN.md) | **仓库 / CI / Release 规划** |
-| [docs/DEV-PROGRESS.md](docs/DEV-PROGRESS.md) | 开发进度 |
-| [docs/梦幻西游工具箱.md](docs/梦幻西游工具箱.md) | 产品需求 |
-| [docs/mhxy-toolbox-prototype.html](docs/mhxy-toolbox-prototype.html) | 交互原型 |
-| [.github/workflows/README.md](.github/workflows/README.md) | Actions 说明 |
+https://github.com/saplinghub/ZDream
 
-## 建 GitHub 仓之后
+1. push `main` → **CI Frontend**
+2. tag `v0.1.0` 并 push，或 Actions 里手动跑 **Release Tauri**
+3. Releases 下载 Win / macOS 包（draft）
 
-1. 按 `docs/GITHUB-RELEASE-PLAN.md` §3 首次 push  
-2. 推送 `main` 后 **CI Frontend** 会跑 `npm run build`  
-3. 接入 Tauri 后再启用双端 `release-tauri` 发版  
+详见 [docs/GITHUB-RELEASE-PLAN.md](docs/GITHUB-RELEASE-PLAN.md)。
+
+## 说明
+
+- 已移除 ZTools 插件运行路径
+- 窗内快捷记账：`Ctrl+Shift+R`
+- 系统级全局快捷键 / 托盘：后续迭代

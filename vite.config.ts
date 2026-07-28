@@ -2,10 +2,13 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
 
-// ZTools 插件要求相对路径资源（file 协议 / 插件目录加载）
+// Tauri 需要固定端口；生产 base 相对路径
+const host = process.env.TAURI_DEV_HOST
+
 export default defineConfig({
   plugins: [vue()],
   base: './',
+  clearScreen: false,
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
@@ -14,7 +17,11 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
-    open: false,
+    host: host || false,
+    hmr: host ? { protocol: 'ws', host, port: 5173 } : undefined,
+    watch: {
+      ignored: ['**/src-tauri/**'],
+    },
   },
   build: {
     outDir: 'dist',

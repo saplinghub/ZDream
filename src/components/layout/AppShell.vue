@@ -49,7 +49,7 @@ function go(path: string) {
       <div class="dots" aria-hidden="true">
         <span class="dot r" /><span class="dot y" /><span class="dot g" />
       </div>
-      <div class="brand"><b>梦幻西游工具箱</b> · ZTools 插件</div>
+      <div class="brand"><b>梦金囊</b> · 桌面版</div>
       <span class="meta num">{{ clock }}</span>
     </div>
 

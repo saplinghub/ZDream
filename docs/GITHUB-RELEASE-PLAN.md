@@ -2,7 +2,7 @@
 
 > 工程：`vue/ZDream`（正式唯一工程）  
 > 产品形态：Tauri 2 + Vue 3 + SQLite 桌面应用（Windows 为主，macOS 兼容）  
-> 状态：规划已定；Tauri 壳与 SQLite **尚未接入代码**（见文末阶段）  
+> 状态：Tauri 2 + SQLite 骨架已接入；安装包由 GitHub Actions 产出  
 > 更新：2026-07-28
 
 ---
@@ -97,7 +97,7 @@ git push -u origin main
 | **CI-C 发布** | 同 tag | 上传到 GitHub Release | CI-B 成功 |
 | **CI-D 签名**（后置） | Release | Apple 公证 / Win 代码签名 | Secrets + 证书 |
 
-当前仓库：**先具备 CI-A 条件**；CI-B/C 等 Tauri 接入后再启用完整 workflow（见 `.github/workflows/README.md`）。
+当前仓库：CI-A（前端）与 CI-B/C（`release-tauri.yml`）均已就位。打 `v*` tag 或手动 Run workflow 即可双端构建。
 
 ### 4.2 矩阵设计（CI-B 目标形态）
 

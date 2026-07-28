@@ -1,25 +1,20 @@
-# GitHub Actions 说明
+# GitHub Actions
 
-本目录存放 CI / 发版工作流。
-
-## 文件
-
-| 文件 | 状态 | 作用 |
+| 文件 | 触发 | 作用 |
 |------|------|------|
-| `ci-frontend.yml` | ✅ 可用 | 仅校验 Vue/Vite 能否 `npm run build` |
-| `release-tauri.yml.example` | 📄 示例 | Tauri 双端打包模板；**接入 `src-tauri` 后**改名为 `release-tauri.yml` 并按需修改 |
+| `ci-frontend.yml` | push/PR → main | `npm ci` + 前端 `npm run build` |
+| `release-tauri.yml` | tag `v*` 或手动 | Win + Mac Tauri 构建，Draft Release |
+| `release-tauri.yml.example` | — | 旧示例，可忽略 |
 
-完整策略见 [docs/GITHUB-RELEASE-PLAN.md](../../docs/GITHUB-RELEASE-PLAN.md)。
+## 打安装包
 
-## 启用双端发版前必须具备
+```bash
+git tag -a v0.1.0 -m "v0.1.0"
+git push origin v0.1.0
+```
 
-1. 工程内已有可构建的 `src-tauri/`（Tauri 2）  
-2. `package.json` 中有 `tauri` 相关 script  
-3. 本地或文档中确认 `tauri build` 在单平台能通过  
-4. 将 `release-tauri.yml.example` 复制为 `release-tauri.yml`  
-5. 按实际产物路径改 `upload` 路径（不同 bundler 后缀不同）  
+或在 Actions 里对 **Release Tauri** 点 **Run workflow**。
 
-## 触发约定（目标）
+产物在 GitHub → Releases（draft）或对应 workflow 的 Artifacts。
 
-- **Push / PR → `main`**：跑 `ci-frontend.yml`  
-- **Tag `v*`**：跑 Tauri 双端 build + Release（启用 example 之后）  
+详见 [docs/GITHUB-RELEASE-PLAN.md](../../docs/GITHUB-RELEASE-PLAN.md)。

@@ -1,25 +1,33 @@
 {
-  "name": "mhxy-zdream-toolbox",
+  "name": "zdream",
   "private": true,
   "version": "0.1.0",
-  "description": "梦幻西游工具箱 · ZTools 插件",
+  "description": "梦金囊 · 梦幻西游多开财务记账（Tauri 桌面）",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview",
-    "typecheck": "vue-tsc -b --pretty false"
+    "typecheck": "vue-tsc -b --pretty false",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-dialog": "^2",
+    "@tauri-apps/plugin-fs": "^2",
+    "@tauri-apps/plugin-notification": "^2",
+    "@tauri-apps/plugin-sql": "^2",
     "pinia": "^4.0.2",
     "vue": "^3.5.40",
     "vue-router": "^4.6.4"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2",
     "@types/node": "^22.20.1",
     "@vitejs/plugin-vue": "^5.2.4",
     "@vue/tsconfig": "^0.5.1",
-    "@ztools-center/ztools-api-types": "^1.0.3",
     "typescript": "~5.6",
     "vite": "^5.4.21",
     "vue-tsc": "^2.2.12"
