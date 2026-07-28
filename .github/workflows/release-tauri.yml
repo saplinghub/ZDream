@@ -47,6 +47,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          projectPath: .
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || format('dev-{0}', github.sha) }}
           releaseName: 梦金囊 ${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
           releaseBody: |
@@ -54,5 +55,5 @@ jobs:
             - Windows：安装包可能被 SmartScreen 拦截，选择仍要运行即可。
             - macOS：未公证时需在「隐私与安全性」中允许打开。
           releaseDraft: true
-          prerelease: ${{ github.ref_type != 'tag' }}
+          prerelease: true
           args: ""

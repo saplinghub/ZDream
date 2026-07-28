@@ -18,11 +18,8 @@ pub fn run() {
                 .add_migrations("sqlite:zdream.db", migrations)
                 .build(),
         )
+        // 全局快捷键后续再注册；插件保留以便权限与依赖就绪
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .setup(|_app| {
-            // 全局快捷键等可在后续迭代注册；首版保证窗口与 SQL 可用
-            Ok(())
-        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
