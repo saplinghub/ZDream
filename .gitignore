@@ -48,3 +48,6 @@ Thumbs.db
 coverage
 *.lcov
 .tauri
+
+# Local downloaded installers
+releases/
