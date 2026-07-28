@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 jobs:
   build:
@@ -34,6 +35,12 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install Linux deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
@@ -57,11 +64,49 @@ jobs:
           {
             echo "## Tauri build log (${{ matrix.platform }})"
             echo ""
-            echo '```'
-            # keep summary under size limits
-            tail -n 200 tauri-build.log 2>/dev/null || echo "(no log file)"
+            echo '```text'
+            tail -n 250 tauri-build.log 2>/dev/null || echo "(no log file)"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Open issue with failure log
+        if: steps.build.outcome != 'success'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let body = '(no log)';
+            try {
+              body = fs.readFileSync('tauri-build.log', 'utf8');
+            } catch (e) {
+              body = String(e);
+            }
+            // GitHub issue body limit ~65536; keep tail
+            if (body.length > 50000) {
+              body = body.slice(-50000);
+            }
+            const title = `[ci] Tauri build failed on ${{ matrix.platform }} (${context.ref})`;
+            const issueBody = [
+              `**Platform:** \`${{ matrix.platform }}\``,
+              `**Ref:** \`${context.ref}\``,
+              `**SHA:** \`${context.sha}\``,
+              `**Run:** ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              '',
+              '<details><summary>tauri-build.log (tail)</summary>',
+              '',
+              '```text',
+              body,
+              '```',
+              '',
+              '</details>'
+            ].join('\n');
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body: issueBody,
+              labels: []
+            });
 
       - name: Upload build log
         if: always()
