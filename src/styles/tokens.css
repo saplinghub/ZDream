@@ -452,39 +452,42 @@ h3 {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
+  padding: 8px 14px;
   background: color-mix(in oklch, var(--surface) 92%, var(--bg));
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
-.titlebar .dots {
-  display: flex;
-  gap: 6px;
-}
-.titlebar .dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--border);
-}
-.titlebar .dot.r {
-  background: color-mix(in oklch, var(--danger) 70%, var(--border));
-}
-.titlebar .dot.y {
-  background: color-mix(in oklch, var(--warn) 70%, var(--border));
-}
-.titlebar .dot.g {
-  background: color-mix(in oklch, var(--accent) 70%, var(--border));
-}
 .titlebar .brand {
   font-family: var(--font-display);
-  font-size: 12px;
-  letter-spacing: 0.04em;
+  font-size: 13px;
+  letter-spacing: 0.02em;
   color: var(--muted);
 }
 .titlebar .brand b {
   color: var(--fg);
   font-weight: 600;
+}
+
+/* 独立浮窗 / 小图标窗 */
+html.float-window,
+body.float-window,
+html.dock-window,
+body.dock-window {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  overflow: hidden;
+  height: 100%;
+  width: 100%;
+}
+body.float-window #app,
+body.dock-window #app {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  display: block;
+  background: transparent;
 }
 
 .online-bar {

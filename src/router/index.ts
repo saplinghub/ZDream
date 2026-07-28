@@ -4,10 +4,7 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 const router = createRouter({
   history: createWebHashHistory(),
   routes: [
-    {
-      path: '/',
-      redirect: '/dashboard',
-    },
+    { path: '/', redirect: '/dashboard' },
     {
       path: '/dashboard',
       name: 'dashboard',
@@ -37,6 +34,19 @@ const router = createRouter({
       name: 'settings',
       component: () => import('@/views/SettingsView.vue'),
       meta: { title: '设置' },
+    },
+    // 独立悬浮窗路由（无主壳）
+    {
+      path: '/live-float',
+      name: 'live-float',
+      component: () => import('@/views/LiveFloatView.vue'),
+      meta: { title: '在线动态', chrome: 'float' },
+    },
+    {
+      path: '/live-dock',
+      name: 'live-dock',
+      component: () => import('@/views/LiveDockView.vue'),
+      meta: { title: '动态', chrome: 'dock' },
     },
   ],
 })

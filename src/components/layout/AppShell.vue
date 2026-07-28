@@ -3,6 +3,8 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { fmtClock } from '@/utils/format'
+import { isTauri } from '@/platform/desktop'
+import { openLiveMonitor } from '@/platform/windows'
 
 const icons: Record<string, string> = {
   dashboard: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>`,
@@ -41,16 +43,29 @@ const liveBadge = computed(() => Math.min(store.events.length, 99))
 function go(path: string) {
   router.push(path)
 }
+
+async function onOpenLiveFloat() {
+  if (isTauri()) {
+    await openLiveMonitor(true)
+    store.showLiveFloat = false
+    store.showFloatWin = false
+    return
+  }
+  store.showLiveFloat = !store.showLiveFloat
+  if (store.showLiveFloat) store.showFloatWin = false
+}
 </script>
 
 <template>
   <div class="app-shell" id="app-shell">
     <div class="titlebar">
-      <div class="dots" aria-hidden="true">
-        <span class="dot r" /><span class="dot y" /><span class="dot g" />
+      <div class="brand"><b>梦金囊</b></div>
+      <div class="titlebar-actions">
+        <button class="btn btn-ghost btn-sm" type="button" title="在线动态悬浮窗" @click="onOpenLiveFloat">
+          动态窗
+        </button>
+        <span class="meta num">{{ clock }}</span>
       </div>
-      <div class="brand"><b>梦金囊</b> · 桌面版</div>
-      <span class="meta num">{{ clock }}</span>
     </div>
 
     <div class="online-bar">
@@ -67,16 +82,10 @@ function go(path: string) {
         <span class="t">{{ store.onlineDurationLabel(a) }}</span>
       </button>
       <div class="spacer" />
-      <span
-        class="budget-warn"
-        :class="{ show: store.budgetOver }"
-        title="本月 RMB 已超预算"
-      >
+      <span class="budget-warn" :class="{ show: store.budgetOver }" title="本月 RMB 已超预算">
         预算超限 ¥{{ Math.round(store.monthSpentRmb) }}/{{ store.settings.monthlyBudget }}
       </span>
-      <button class="btn btn-danger btn-sm" type="button" @click="store.openOfflineModal">
-        全部下线
-      </button>
+      <button class="btn btn-danger btn-sm" type="button" @click="store.openOfflineModal">全部下线</button>
     </div>
 
     <div class="body-row">
@@ -95,11 +104,13 @@ function go(path: string) {
         </button>
         <div class="nav-hint">
           快捷记账<br />
-          <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd><br />
-          或点右下浮窗
-          <div style="margin-top: 8px">
+          <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>
+          <div style="margin-top: 8px; display: flex; flex-direction: column; gap: 6px">
             <button class="btn btn-secondary btn-sm btn-block" type="button" @click="store.showFloatWin = true">
-              打开快捷记账
+              快捷记账
+            </button>
+            <button class="btn btn-secondary btn-sm btn-block" type="button" @click="onOpenLiveFloat">
+              动态悬浮窗
             </button>
           </div>
         </div>
@@ -110,3 +121,11 @@ function go(path: string) {
     </div>
   </div>
 </template>
+
+<style scoped>
+.titlebar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+</style>

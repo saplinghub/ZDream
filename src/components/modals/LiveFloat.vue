@@ -1,4 +1,7 @@
 <script setup lang="ts">
+/**
+ * 浏览器降级：页内动态浮层（Tauri 下使用独立 WebviewWindow）
+ */
 import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { fmtTimeShort } from '@/utils/format'
@@ -14,6 +17,11 @@ function openFull() {
   store.showLiveFloat = false
   router.push('/live')
 }
+
+function collapseToDock() {
+  // 浏览器无系统级小图标，仅收起浮层
+  store.showLiveFloat = false
+}
 </script>
 
 <template>
@@ -22,7 +30,7 @@ function openFull() {
       <span class="title">LIVE · 在线动态</span>
       <div class="row" style="gap: 4px">
         <button class="btn btn-ghost btn-sm" type="button" @click="openFull">展开页</button>
-        <button class="btn btn-ghost btn-sm" type="button" @click="store.showLiveFloat = false">收起</button>
+        <button class="btn btn-ghost btn-sm" type="button" @click="collapseToDock">收起</button>
       </div>
     </div>
     <div class="lf-body">

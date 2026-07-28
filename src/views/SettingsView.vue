@@ -206,8 +206,8 @@ async function onImportNative() {
       <div class="card settings-block stack" style="grid-column: 1 / -1">
         <h3>数据与快捷键</h3>
         <div class="field">
-          <label>全局快捷键</label>
-          <input class="input" :value="store.settings.hotkey" readonly />
+          <label>窗内快捷记账</label>
+          <input class="input" value="Ctrl+Shift+R" readonly />
         </div>
         <div class="row" style="gap: 8px; flex-wrap: wrap">
           <button class="btn btn-secondary btn-sm" type="button" @click="store.exportJson">导出 JSON</button>
@@ -222,7 +222,7 @@ async function onImportNative() {
           />
         </div>
         <div class="meta">
-          数据仅存本地（桌面 SQLite / 浏览器用 localStorage）· 不上传云端 · Ctrl+Shift+R
+          数据仅存本地（桌面 SQLite / 浏览器 localStorage）· 不上传云端 · Ctrl+Shift+R 快捷记账 · 动态可开独立悬浮窗
           呼出记账浮窗
         </div>
       </div>

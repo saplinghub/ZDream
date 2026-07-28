@@ -169,6 +169,7 @@ src/
 | 2026-07-28 | **转向桌面**：Tauri 2 + Vue + SQLite；弃用 z-dream/ZTools 正式线 |
 | 2026-07-28 | **GitHub 发版规划**：GITHUB-RELEASE-PLAN.md、ci-frontend.yml、release-tauri 示例、gitignore |
 | 2026-07-28 | **Tauri 2 接入**：src-tauri + SQLite kv + desktop 平台层；移除 ZTools；启用 release-tauri.yml；前端 build 通过 |
+| 2026-07-28 | **v0.1.1**：独立动态悬浮窗（展开/收成小图标）、去掉标题栏装饰圆点、能力权限补全多窗口 |
 
 
 

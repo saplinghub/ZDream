@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { fmtDur, fmtTimeShort } from '@/utils/format'
+import { isTauri } from '@/platform/desktop'
+import { toggleLiveMonitor } from '@/platform/windows'
 
 const store = useAppStore()
+const floatOn = ref(false)
 
 const liveStats = computed(() => ({
   online: store.onlineCount,
@@ -15,10 +18,21 @@ function kindLabel(k: string) {
   return ({ in: '收入', out: '消耗', sys: '系统', cbg: '藏宝阁' } as Record<string, string>)[k] || k
 }
 
-function toggleFloat() {
+async function toggleFloat() {
+  if (isTauri()) {
+    floatOn.value = await toggleLiveMonitor()
+    store.showLiveFloat = false
+    return
+  }
   store.showLiveFloat = !store.showLiveFloat
   if (store.showLiveFloat) store.showFloatWin = false
+  floatOn.value = store.showLiveFloat
 }
+
+const floatLabel = computed(() => {
+  if (isTauri()) return floatOn.value ? '关闭悬浮窗' : '打开悬浮窗'
+  return store.showLiveFloat ? '关闭悬浮窗' : '打开悬浮窗'
+})
 </script>
 
 <template>
@@ -27,13 +41,13 @@ function toggleFloat() {
       <div>
         <p class="eyebrow">LIVE</p>
         <h1>在线动态</h1>
-        <p class="sub">角色上线后实时滚动 · 也可开悬浮窗随时盯盘</p>
+        <p class="sub">独立悬浮窗盯盘 · 可收成小图标</p>
       </div>
       <div class="row" style="gap: 8px">
         <button class="btn btn-secondary btn-sm" type="button" @click="toggleFloat">
-          {{ store.showLiveFloat ? '关闭悬浮窗' : '打开悬浮窗' }}
+          {{ floatLabel }}
         </button>
-        <button class="btn btn-ghost btn-sm" type="button" @click="store.simLiveEvent">模拟一条动态</button>
+        <button class="btn btn-ghost btn-sm" type="button" @click="store.simLiveEvent">模拟一条</button>
       </div>
     </div>
 
@@ -71,11 +85,15 @@ function toggleFloat() {
         <h2>当前在线</h2>
         <div v-if="!store.onlineAccounts.length" class="empty">暂无在线账号</div>
         <div v-for="a in store.accounts" :key="a.id" class="live-chip">
-          <span class="led" :class="{ on: a.online }" :style="a.online ? { animation: 'pulse 1.6s ease-in-out infinite' } : {}" />
+          <span
+            class="led"
+            :class="{ on: a.online }"
+            :style="a.online ? { animation: 'pulse 1.6s ease-in-out infinite' } : {}"
+          />
           <span class="nm">{{ a.name }}</span>
           <span class="tm">{{ store.onlineDurationLabel(a) }}</span>
         </div>
-        <div class="meta" style="margin-top: 8px">点击顶栏芯片可单独上/下线 · 动态页默认随会话更新</div>
+        <div class="meta" style="margin-top: 8px">点顶栏芯片切换上/下线</div>
       </div>
     </div>
   </section>
