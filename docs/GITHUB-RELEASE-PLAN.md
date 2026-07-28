@@ -226,12 +226,15 @@ Tauri Updater + 在 Release 放 `latest.json` 一类端点。
 
 ---
 
-## 9. 远程地址（建仓后填写）
+## 9. 远程地址
 
 ```
-HTTPS: https://github.com/________/________.git
-SSH:   git@github.com:________/________.git
+HTTPS: https://github.com/saplinghub/ZDream.git
+SSH:   git@github.com:saplinghub/ZDream.git
+Web:   https://github.com/saplinghub/ZDream
 ```
+
+首次推送已完成（2026-07-28）：本地 baseline + 远程 LICENSE 已合并到 `main`。
 
 ---
 
