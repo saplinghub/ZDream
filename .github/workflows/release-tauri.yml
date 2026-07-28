@@ -17,9 +17,7 @@ jobs:
       matrix:
         include:
           - platform: macos-latest
-            args: ""
           - platform: windows-latest
-            args: ""
 
     runs-on: ${{ matrix.platform }}
 
@@ -45,12 +43,25 @@ jobs:
         run: npm ci
 
       - name: Build Tauri (verbose)
+        id: build
         shell: bash
+        continue-on-error: true
         run: |
           set -o pipefail
           npx tauri build --verbose 2>&1 | tee tauri-build.log
-        continue-on-error: true
-        id: build
+
+      - name: Publish log to job summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Tauri build log (${{ matrix.platform }})"
+            echo ""
+            echo '```'
+            # keep summary under size limits
+            tail -n 200 tauri-build.log 2>/dev/null || echo "(no log file)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload build log
         if: always()
@@ -67,14 +78,12 @@ jobs:
           name: zdream-${{ matrix.platform }}
           path: |
             src-tauri/target/release/bundle
-            src-tauri/target/release/*.exe
-            src-tauri/target/release/zdream
-            src-tauri/target/release/zdream.exe
           if-no-files-found: warn
 
       - name: Fail if build failed
         if: steps.build.outcome != 'success'
+        shell: bash
         run: |
-          echo "Tauri build failed. See artifact tauri-build-log-${{ matrix.platform }}"
-          tail -n 100 tauri-build.log || true
+          echo "Tauri build failed on ${{ matrix.platform }}"
+          tail -n 80 tauri-build.log || true
           exit 1
