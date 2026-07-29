@@ -1,7 +1,7 @@
 # 梦幻西游工具箱 · 开发进度
 
-> 最后更新：2026-07-28  
-> 状态图例：⬜ 未开始 · 🔄 进行中 · ✅ 已完成 · ⏸ 暂缓 · 🔶 部分完成
+> 最后更新：2026-07-29  
+> 状态图例：⬜ 未开始 · 🔄 进行中 · ✅ 已完成 · ⏸ 暂缓 · 🔶 部分完成 · 🟢 已构建完成
 
 ## 总览
 
@@ -9,17 +9,22 @@
 |------|------|------|------|
 | 0 | 工程骨架 + 进度文档 | ✅ | Vue3/Vite5/TS、主题、壳布局 |
 | 1 | P0 MVP 核心闭环 | ✅ | 账号/记账/藏宝阁/看板/导入导出可运行 |
-| 1.5 | ZTools 插件改造（历史） | ⏸ | 已决定不做正式运行目标；代码残留待清 |
+| 1.5 | ZTools 插件改造（历史） | ✅ | 已决定不做正式运行目标；代码残留待清 |
 | 1.6 | GitHub / CI / 发版规划 | ✅ | GITHUB-RELEASE-PLAN + workflows |
 | 2 | **Tauri 2 桌面壳 + SQLite** | ✅ | src-tauri、desktop 适配、kv schema；CI 双端发版 |
 | 2.1 | 清 ZTools 残留 | ✅ | 无 plugin.json/preload/ztools 运行依赖 |
 | 3 | P1 / 托盘 / 全局快捷键注册 | 🔶 | 插件已引入，注册逻辑后续 |
-| 4 | 签名发版 + 视觉打磨 | ⬜ | |
+| 4 | 签名发版 + 视觉打磨 | 🟢 | GitHub Actions 已完成双端构建 |
 
 **当前目标**：用 GitHub Actions 打出 Win/Mac 安装包并内测。  
 **已弃用**：ZTools 插件运行线、`zTools/z-dream` 正式维护。
 
-**本地运行（目前为前端预览）**：
+**⚠️ 开发准则**：
+- **本地仅做前端开发**，不安装 Rust/Tauri 等构建工具链
+- **所有桌面构建在 GitHub Actions 上完成**，通过 `git tag v*` 触发
+- 本地运行 `npm run dev` 即可预览前端
+
+**本地运行**：
 
 ```bash
 cd /Users/sapling/tool/vs_code_project/vue/ZDream
@@ -163,6 +168,11 @@ src/
 
 | 日期 | 内容 |
 |------|------|
+| 2026-07-29 | **CI 自动发布**：workflow 新增 `publish` job，构建完成后自动创建 GitHub Release + 上传安装包，无需本地操作 |
+| 2026-07-29 | **v0.1.3**：CI 自动发布流程；清理本地 Rust/Tauri 工具链（释放 ~2.8G 磁盘） |
+| 2026-07-29 | **v0.1.2**：修复图标路径；tag 已推但 Release 因旧 workflow 无 publish job 未自动创建 |
+| 2026-07-29 | **开发环境清理**：卸载 rustup/cargo/rustc（~1.66G）；清理 npm 缓存（~467M）；清理 Claude Code 历史（~660M） |
+| 2026-07-29 | **GitHub Actions 构建成功**：双端安装包已生成并上传至 GitHub Releases<br>`zdream-macos-latest/ZDream_0.1.1_aarch64.dmg` + `zdream-windows-latest/ZDream_0.1.1_x64_en-US.msi` |
 | 2026-07-28 | 创建进度文档；初始化工程；落地 P0 全页可运行；`npm run build` 通过 |
 | 2026-07-28 | Vite 降级至 5.x 以兼容当前 Node 22.10；写入 README |
 | 2026-07-28 | **改造为 ZTools 插件**（历史尝试）：plugin.json、preload、dbStorage 等 |
@@ -170,8 +180,6 @@ src/
 | 2026-07-28 | **GitHub 发版规划**：GITHUB-RELEASE-PLAN.md、ci-frontend.yml、release-tauri 示例、gitignore |
 | 2026-07-28 | **Tauri 2 接入**：src-tauri + SQLite kv + desktop 平台层；移除 ZTools；启用 release-tauri.yml；前端 build 通过 |
 | 2026-07-28 | **v0.1.1**：独立动态悬浮窗（展开/收成小图标）、去掉标题栏装饰圆点、能力权限补全多窗口 |
-
-
 
 ## 桌面接入（Tauri）
 
@@ -181,5 +189,41 @@ src/
 | SQLite `zdream.db` + kv | ✅ | migrations/001_init.sql |
 | `platform/desktop.ts` | ✅ | 桌面/Web 双轨 |
 | 清 ZTools | ✅ | 无 plugin 运行依赖 |
-| `release-tauri.yml` | ✅ | tag / 手动双端构建 |
-| 本机 Rust / tauri dev | ⬜ | 后置；发版靠 CI |
+| `release-tauri.yml` | ✅ | tag `v*` 触发 → 双端构建 → 自动发布 GitHub Release |
+| **GitHub Actions 构建** | 🟢 | 双端 DMG/MSI 已成功生成并自动发布 |
+
+## 发版流程
+
+**触发方式**：`git tag v* && git push origin <tag>`
+
+**自动化流程**（全部在 GitHub 上运行）：
+1. `push tag v*` → 触发 `Release Tauri` workflow
+2. macOS + Windows 并行构建（各约 9 分钟）
+3. 构建完成后 `publish` job 自动：
+   - 收集双端安装包（dmg / exe / msi）
+   - 创建 GitHub Release
+   - 上传所有安装包作为 Release Assets
+   - 自动生成 Release Notes
+
+**版本历史**：
+| 版本 | 状态 | 说明 |
+|------|------|------|
+| v0.1.3 | ✅ 已发布 | CI 自动发布流程（首次全自动构建+发布） |
+| v0.1.2 | ✅ 构建成功 | 无 Release（旧 workflow 无 publish job） |
+| v0.1.1 | ✅ 已发布 | 首个双端安装包 |
+| v0.1.0-alpha.5 | ✅ 已发布 | 图标修复 |
+
+## macOS 安装须知
+
+**未签名应用，打开时报"已损坏"是正常现象。**
+
+由于未购买 Apple Developer 证书（$99/年），安装包无法通过 macOS 签名公证。下载后需手动移除隔离标记：
+
+```bash
+# 1. 将 ZDream.app 拖入 /Applications
+# 2. 终端执行：
+xattr -cr /Applications/ZDream.app
+# 3. 再次打开即可
+```
+
+知道没有其他方案：要么每年 $99 买 Apple Developer Program，要么每次都这样绕。Windows 端无此问题。
