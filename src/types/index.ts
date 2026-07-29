@@ -101,6 +101,8 @@ export interface AppSettings {
   customHex: string
   /** 业务数据存储目录（空 = 默认 AppData） */
   dataDir: string
+  /** GitHub 加速代理前缀，如 https://ghproxy.com/（空 = 直连） */
+  githubProxy: string
 }
 
 /** 在线会话记录 */

@@ -24,21 +24,21 @@ const newTpl = reactive({ name: '', accountId: '', item: '', io: 'in' as 'in' | 
 const updater = useUpdateChecker()
 
 async function checkUpdate() {
-  await updater.check()
+  await updater.check(store.settings.githubProxy)
   if (updater.status.value.info?.hasUpdate) {
     showUpdateModal.value = true
   }
 }
 
 async function doDownload(assetUrl: string, fileName: string) {
-  await updater.downloadUpdate(assetUrl, fileName)
+  await updater.downloadUpdate(assetUrl, fileName, store.settings.githubProxy)
 }
 
 onMounted(() => {
   // 启动后 5 秒自动检查一次
   setTimeout(() => {
     if (!updater.status.value.info) {
-      updater.check()
+      updater.check(store.settings.githubProxy)
     }
   }, 5000)
 })
@@ -373,15 +373,22 @@ async function onImportNative() {
           </div>
         </div>
 
-        <div class="row" style="gap: 8px; margin-top: 8px">
-          <button
-            class="btn btn-secondary btn-sm"
-            type="button"
-            :disabled="updater.status.value.checking"
-            @click="checkUpdate"
-          >
-            {{ updater.status.value.checking ? '检查中...' : '检查更新' }}
-          </button>
+        <div class="field" style="margin-top: 8px">
+          <label>GitHub 加速代理（如无法访问 GitHub）</label>
+          <div class="row" style="gap: 8px">
+            <input v-model="store.settings.githubProxy" class="input" placeholder="https://ghproxy.com/" style="flex:1" />
+            <button
+              class="btn btn-secondary btn-sm"
+              type="button"
+              :disabled="updater.status.value.checking"
+              @click="checkUpdate"
+            >
+              {{ updater.status.value.checking ? '检查中...' : '检查更新' }}
+            </button>
+          </div>
+          <div class="meta" style="font-size: 11px">
+            访问 GitHub 困难时填写加速地址，如 <code>https://ghproxy.com/</code>。留空 = 直连 GitHub。
+          </div>
         </div>
       </div>
 

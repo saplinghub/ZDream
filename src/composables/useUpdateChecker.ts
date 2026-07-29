@@ -107,12 +107,21 @@ export function useUpdateChecker() {
     }
   }
 
-  async function check(): Promise<UpdateInfo | null> {
+  /** 拼接代理前缀 */
+  function proxyUrl(url: string, proxy: string): string {
+    if (!proxy) return url
+    // 去掉代理地址末尾的 /
+    const base = proxy.replace(/\/+$/, '')
+    return `${base}/${url}`
+  }
+
+  async function check(proxy = ''): Promise<UpdateInfo | null> {
     status.value = { checking: true, error: '', info: null }
 
     try {
       const current = await getCurrentVersion()
-      const res = await fetch(GITHUB_API, {
+      const apiUrl = proxyUrl(GITHUB_API, proxy)
+      const res = await fetch(apiUrl, {
         headers: { Accept: 'application/vnd.github+json' },
       })
 
@@ -200,14 +209,14 @@ export function useUpdateChecker() {
   }
 
   /** 应用内下载安装包，带进度条 */
-  async function downloadUpdate(assetUrl: string, fileName: string): Promise<string | null> {
+  async function downloadUpdate(assetUrl: string, fileName: string, proxy = ''): Promise<string | null> {
     download.value = { downloading: true, progress: 0, fileName, savedPath: '', error: '' }
     abortController = new AbortController()
 
     try {
-      const res = await fetch(assetUrl, {
+      const downloadUrl = proxyUrl(assetUrl, proxy)
+      const res = await fetch(downloadUrl, {
         signal: abortController.signal,
-        // GitHub release assets 可能重定向，不设 redirect: 'manual'
       })
 
       if (!res.ok) {

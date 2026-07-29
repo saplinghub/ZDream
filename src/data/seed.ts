@@ -266,4 +266,5 @@ export const seedSettings: AppSettings = {
   theme: 'mint',
   customHex: '#3d9b6e',
   dataDir: '',
+  githubProxy: '',
 }
