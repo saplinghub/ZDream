@@ -86,6 +86,8 @@ export const useAppStore = defineStore('app', () => {
   const showOfflineModal = ref(false)
   const showFloatWin = ref(false)
   const showLiveFloat = ref(false)
+  const showQuickDock = ref(false)
+  const quickRecordCount = ref(0)
   const showListModal = ref(false)
   const showSoldModal = ref(false)
   const showBuyModal = ref(false)
@@ -927,6 +929,8 @@ export const useAppStore = defineStore('app', () => {
     showOfflineModal,
     showFloatWin,
     showLiveFloat,
+    showQuickDock,
+    quickRecordCount,
     showListModal,
     showSoldModal,
     showEditModal,

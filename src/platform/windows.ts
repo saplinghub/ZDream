@@ -5,9 +5,13 @@ import { isTauri } from '@/platform/desktop'
 
 export const LIVE_WINDOW = 'live-float'
 export const LIVE_DOCK_WINDOW = 'live-dock'
+export const QUICK_WINDOW = 'quick-float'
+export const QUICK_DOCK_WINDOW = 'quick-dock'
 
 const LIVE_EXPANDED = { width: 340, height: 460 }
 const LIVE_DOCK = { width: 56, height: 56 }
+const QUICK_EXPANDED = { width: 340, height: 440 }
+const QUICK_DOCK = { width: 56, height: 56 }
 
 function liveUrl(hashPath: string): string {
   if (typeof window === 'undefined') return hashPath
@@ -172,4 +176,116 @@ export async function toggleLiveMonitor(): Promise<boolean> {
   }
   await openLiveMonitor(true)
   return true
+}
+
+// ── 快捷记账浮窗 (QuickFloat) ──
+
+export async function openQuickFloat(expanded = true): Promise<void> {
+  if (!isTauri()) return
+  const { WebviewWindow, getAllWebviewWindows } = await import('@tauri-apps/api/webviewWindow')
+  const all = await getAllWebviewWindows()
+  const existing = all.find((w) => w.label === QUICK_WINDOW || w.label === QUICK_DOCK_WINDOW)
+  if (existing) {
+    if (expanded && existing.label === QUICK_DOCK_WINDOW) {
+      await expandQuickFloat()
+      return
+    }
+    if (!expanded && existing.label === QUICK_WINDOW) {
+      await collapseQuickFloat()
+      return
+    }
+    await existing.show()
+    await existing.setFocus()
+    return
+  }
+
+  if (expanded) {
+    const w = new WebviewWindow(QUICK_WINDOW, {
+      url: liveUrl('/quick-float'),
+      title: '梦金囊',
+      width: QUICK_EXPANDED.width,
+      height: QUICK_EXPANDED.height,
+      minWidth: 280,
+      minHeight: 360,
+      resizable: true,
+      decorations: false,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      visible: true,
+      focus: true,
+    })
+    await new Promise<void>((resolve, reject) => {
+      w.once('tauri://created', () => resolve())
+      w.once('tauri://error', (e) => reject(e))
+    })
+  } else {
+    await openQuickDock()
+  }
+}
+
+async function openQuickDock(): Promise<void> {
+  const { WebviewWindow, getAllWebviewWindows } = await import('@tauri-apps/api/webviewWindow')
+  const all = await getAllWebviewWindows()
+  const existing = all.find((w) => w.label === QUICK_DOCK_WINDOW)
+  if (existing) {
+    await existing.show()
+    await existing.setFocus()
+    return
+  }
+  const w = new WebviewWindow(QUICK_DOCK_WINDOW, {
+    url: liveUrl('/quick-dock'),
+    title: '记账',
+    width: QUICK_DOCK.width,
+    height: QUICK_DOCK.height,
+    resizable: false,
+    decorations: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    visible: true,
+    focus: false,
+  })
+  await new Promise<void>((resolve, reject) => {
+    w.once('tauri://created', () => resolve())
+    w.once('tauri://error', (e) => reject(e))
+  })
+}
+
+export async function closeQuickFloat(): Promise<void> {
+  if (!isTauri()) return
+  const { getAllWebviewWindows } = await import('@tauri-apps/api/webviewWindow')
+  const all = await getAllWebviewWindows()
+  for (const w of all) {
+    if (w.label === QUICK_WINDOW || w.label === QUICK_DOCK_WINDOW) {
+      await w.close()
+    }
+  }
+}
+
+export async function collapseQuickFloat(): Promise<void> {
+  if (!isTauri()) return
+  const { getAllWebviewWindows } = await import('@tauri-apps/api/webviewWindow')
+  const all = await getAllWebviewWindows()
+  const expanded = all.find((w) => w.label === QUICK_WINDOW)
+  if (expanded) {
+    try { await expanded.close() } catch { /* ignore */ }
+  }
+  await openQuickDock()
+}
+
+export async function expandQuickFloat(): Promise<void> {
+  if (!isTauri()) return
+  const { getAllWebviewWindows } = await import('@tauri-apps/api/webviewWindow')
+  const all = await getAllWebviewWindows()
+  const dock = all.find((w) => w.label === QUICK_DOCK_WINDOW)
+  if (dock) {
+    try { await dock.close() } catch { /* ignore */ }
+  }
+  const existing = (await getAllWebviewWindows()).find((w) => w.label === QUICK_WINDOW)
+  if (existing) {
+    await existing.show()
+    await existing.setFocus()
+    return
+  }
+  await openQuickFloat(true)
 }

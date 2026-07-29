@@ -54,6 +54,19 @@ const router = createRouter({
       component: () => import('@/views/LiveDockView.vue'),
       meta: { title: '动态', chrome: 'dock' },
     },
+    // 快捷记账浮窗（独立窗口）
+    {
+      path: '/quick-float',
+      name: 'quick-float',
+      component: () => import('@/views/QuickFloatView.vue'),
+      meta: { title: '快捷记账', chrome: 'float' },
+    },
+    {
+      path: '/quick-dock',
+      name: 'quick-dock',
+      component: () => import('@/views/QuickDockView.vue'),
+      meta: { title: '记账', chrome: 'dock' },
+    },
   ],
 })
 

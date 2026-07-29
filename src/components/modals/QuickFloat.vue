@@ -49,8 +49,11 @@ function submit() {
 <template>
   <div class="float-win" :class="{ show: store.showFloatWin }">
     <div class="head">
-      <span class="title">QUICK · CTRL+SHIFT+R</span>
-      <button class="btn btn-ghost btn-sm" type="button" @click="store.showFloatWin = false">关闭</button>
+      <span class="title">梦金囊</span>
+      <div style="display:flex;gap:4px">
+        <button class="btn btn-ghost btn-sm" type="button" title="收成小图标" @click="store.showFloatWin = false; store.showQuickDock = true">[_]</button>
+        <button class="btn btn-ghost btn-sm" type="button" @click="store.showFloatWin = false">✕</button>
+      </div>
     </div>
     <div class="stack">
       <div class="field">

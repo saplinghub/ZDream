@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { fmtClock } from '@/utils/format'
 import { isTauri } from '@/platform/desktop'
-import { openLiveMonitor } from '@/platform/windows'
+import { openLiveMonitor, openQuickFloat } from '@/platform/windows'
 
 const icons: Record<string, string> = {
   dashboard: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>`,
@@ -108,7 +108,11 @@ async function onOpenLiveFloat() {
           快捷记账<br />
           <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>
           <div style="margin-top: 8px; display: flex; flex-direction: column; gap: 6px">
-            <button class="btn btn-secondary btn-sm btn-block" type="button" @click="store.showFloatWin = true">
+            <button
+              class="btn btn-secondary btn-sm btn-block"
+              type="button"
+              @click="isTauri() ? openQuickFloat(true) : (store.showFloatWin = true)"
+            >
               快捷记账
             </button>
             <button class="btn btn-secondary btn-sm btn-block" type="button" @click="onOpenLiveFloat">
