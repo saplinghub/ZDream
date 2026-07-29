@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { THEMES } from '@/theme/themes'
 import type { ItemCategory } from '@/types'
 import { openTextFile } from '@/platform/desktop'
+import { useUpdateChecker } from '@/composables/useUpdateChecker'
 
 const store = useAppStore()
 
@@ -17,6 +18,26 @@ const fee = reactive({
 const customHex = ref(store.settings.customHex)
 const themeKeys = Object.keys(THEMES)
 const fileInput = ref<HTMLInputElement | null>(null)
+const showUpdateModal = ref(false)
+const newTpl = reactive({ name: '', accountId: '', item: '', io: 'in' as 'in' | 'out', sub: '日常', qty: '', price: '' })
+
+const updater = useUpdateChecker()
+
+async function checkUpdate() {
+  await updater.check()
+  if (updater.status.value.info?.hasUpdate) {
+    showUpdateModal.value = true
+  }
+}
+
+onMounted(() => {
+  // 启动后 5 秒自动检查一次
+  setTimeout(() => {
+    if (!updater.status.value.info) {
+      updater.check()
+    }
+  }, 5000)
+})
 
 function addAcct() {
   store.addAccount({ ...newAcct })
@@ -146,6 +167,81 @@ async function onImportNative() {
         </div>
       </div>
 
+      <div class="card settings-block">
+        <div class="row-between"><h3>快捷模板</h3></div>
+        <p class="meta" style="margin: 0 0 8px">记账页一键填入的预设模板</p>
+        <div class="stack" style="gap: 8px">
+          <div class="field">
+            <label>模板名称</label>
+            <input v-model="newTpl.name" class="input" placeholder="如：日常副本收入" />
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label>账号</label>
+              <select v-model="newTpl.accountId" class="select">
+                <option value="">选择账号</option>
+                <option v-for="a in store.accounts" :key="a.id" :value="a.id">{{ a.name }}</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>物品</label>
+              <input v-model="newTpl.item" class="input" placeholder="物品名称" list="tplItemDict" />
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label>收支</label>
+              <div class="seg">
+                <button type="button" :class="{ active: newTpl.io === 'in' }" @click="newTpl.io = 'in'">收入</button>
+                <button type="button" :class="{ active: newTpl.io === 'out' }" @click="newTpl.io = 'out'">消耗</button>
+              </div>
+            </div>
+            <div class="field">
+              <label>子类型</label>
+              <select v-model="newTpl.sub" class="select">
+                <option>日常</option>
+                <option>副本</option>
+                <option>摆摊</option>
+                <option>打造</option>
+                <option>炼妖</option>
+                <option>其他</option>
+              </select>
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label>数量（默认）</label>
+              <input v-model="newTpl.qty" class="input num" placeholder="如 1" />
+            </div>
+            <div class="field">
+              <label>单价（默认）</label>
+              <input v-model="newTpl.price" class="input num" placeholder="如 120000" />
+            </div>
+          </div>
+          <button class="btn btn-secondary btn-sm" type="button" @click="store.addTemplate({ ...newTpl }); newTpl.name = ''; newTpl.item = ''">
+            添加模板
+          </button>
+        </div>
+        <div class="item-list" style="margin-top: 12px">
+          <div v-if="!store.templates.length" class="meta" style="padding: 8px; text-align: center">暂无自定义模板</div>
+          <div v-for="t in store.templates" :key="t.id" class="item-row">
+            <div>
+              <b>{{ t.name }}</b>
+              <div class="meta-line">
+                {{ t.io === 'in' ? '收入' : '消耗' }}·{{ t.sub }}
+                &ensp;{{ t.item }}
+                <span v-if="t.qty"> ×{{ t.qty }}</span>
+                <span v-if="t.price"> @{{ t.price }}</span>
+              </div>
+            </div>
+            <button class="btn btn-ghost btn-sm" type="button" @click="store.removeTemplate(t.id)">删除</button>
+          </div>
+        </div>
+        <datalist id="tplItemDict">
+          <option v-for="it in store.items" :key="it.name" :value="it.name" />
+        </datalist>
+      </div>
+
       <div class="card settings-block stack">
         <h3>外观配色</h3>
         <p class="meta" style="margin: 0 0 8px">预设一键切换 · 也可自定义主色，即时生效并记住</p>
@@ -223,7 +319,94 @@ async function onImportNative() {
         </div>
         <div class="meta">
           数据仅存本地（桌面 SQLite / 浏览器 localStorage）· 不上传云端 · Ctrl+Shift+R 快捷记账 · 动态可开独立悬浮窗
-          呼出记账浮窗
+        </div>
+      </div>
+
+      <!-- 版本更新 -->
+      <div class="card settings-block stack" style="grid-column: 1 / -1">
+        <div class="row-between">
+          <h3>版本更新</h3>
+          <span class="meta" style="font-size: 12px">
+            v{{ updater.status.value.info?.currentVersion || '...' }}
+            <span v-if="updater.status.value.info && !updater.status.value.info.hasUpdate" style="color: var(--accent)">
+              · 已是最新
+            </span>
+          </span>
+        </div>
+
+        <div v-if="updater.status.value.error" class="meta" style="color: var(--danger)">
+          {{ updater.status.value.error }}
+        </div>
+
+        <div v-if="updater.status.value.info?.hasUpdate" style="margin-top: 8px; padding: 12px; background: color-mix(in oklch, var(--accent) 8%, var(--surface)); border-radius: 10px; border: 1px solid var(--accent)">
+          <div style="font-weight: 700; margin-bottom: 4px">
+            🆕 新版本 {{ updater.status.value.info.latestVersion }}
+          </div>
+          <div style="font-size: 12px; color: var(--muted); white-space: pre-line; margin-bottom: 8px">
+            {{ updater.status.value.info.body?.slice(0, 300) }}
+          </div>
+          <div class="row" style="gap: 8px">
+            <a
+              :href="updater.status.value.info.downloadUrl"
+              target="_blank"
+              class="btn btn-primary btn-sm"
+              style="text-decoration: none"
+            >
+              前往下载
+            </a>
+            <button class="btn btn-secondary btn-sm" type="button" @click="showUpdateModal = true">
+              查看详情
+            </button>
+          </div>
+        </div>
+
+        <div class="row" style="gap: 8px; margin-top: 8px">
+          <button
+            class="btn btn-secondary btn-sm"
+            type="button"
+            :disabled="updater.status.value.checking"
+            @click="checkUpdate"
+          >
+            {{ updater.status.value.checking ? '检查中...' : '检查更新' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 更新详情弹窗 -->
+    <div class="overlay" :class="{ show: showUpdateModal }">
+      <div class="modal" style="max-width: 500px">
+        <p class="eyebrow">UPDATE</p>
+        <h2>新版本 {{ updater.status.value.info?.latestVersion }}</h2>
+        <div
+          v-if="updater.status.value.info?.body"
+          style="white-space: pre-line; font-size: 13px; max-height: 300px; overflow: auto; margin: 12px 0; padding: 12px; background: var(--bg); border-radius: 8px"
+        >
+          {{ updater.status.value.info.body }}
+        </div>
+        <div v-if="updater.status.value.info?.assets.length" style="margin-bottom: 12px">
+          <div v-for="a in updater.status.value.info.assets" :key="a.name" class="row" style="gap: 8px; align-items: center; margin-bottom: 4px">
+            <span style="flex: 1; font-size: 13px">{{ a.name }}</span>
+            <span class="meta" style="font-size: 11px">{{ (a.size / 1024 / 1024).toFixed(1) }} MB</span>
+            <a :href="a.url" target="_blank" class="btn btn-secondary btn-sm">下载</a>
+          </div>
+        </div>
+        <div class="meta" style="margin-bottom: 12px">
+          当前版本 v{{ updater.status.value.info?.currentVersion }} &rarr;
+          {{ updater.status.value.info?.latestVersion }}
+          <br />
+          安装包会覆盖升级，数据不受影响（存储在 AppData 目录）
+        </div>
+        <div class="actions">
+          <button class="btn btn-secondary" type="button" @click="showUpdateModal = false">关闭</button>
+          <a
+            :href="updater.status.value.info?.downloadUrl || '#'"
+            target="_blank"
+            class="btn btn-primary"
+            style="text-decoration: none"
+          >
+            前往 GitHub 下载
+          </a>
         </div>
       </div>
     </div>

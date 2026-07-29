@@ -361,6 +361,41 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
+  // —— 模板管理 ——
+  function addTemplate(input: {
+    name: string
+    accountId: string
+    item: string
+    io: 'in' | 'out'
+    sub: string
+    qty: string
+    price: string
+    rmb?: boolean
+  }) {
+    if (!input.name.trim()) return false
+    templates.value.push({
+      id: uid('tpl'),
+      name: input.name.trim(),
+      accountId: input.accountId,
+      item: input.item,
+      io: input.io,
+      sub: input.sub,
+      qty: input.qty,
+      price: input.price,
+      rmb: input.rmb ?? false,
+    })
+    toast('模板已添加')
+    return true
+  }
+
+  function removeTemplate(id: string) {
+    const i = templates.value.findIndex((t) => t.id === id)
+    if (i >= 0) {
+      templates.value.splice(i, 1)
+      toast('模板已删除')
+    }
+  }
+
   // —— 记账 ——
   function addGameRecord(input: {
     accountId: string
@@ -964,6 +999,8 @@ export const useAppStore = defineStore('app', () => {
     removeAccount,
     addItem,
     removeItem,
+    addTemplate,
+    removeTemplate,
     addGameRecord,
     addCardRecord,
     addSpendRecord,
