@@ -1,4 +1,4 @@
-# 双端桌面构建：tag v* 或手动触发
+# 双端桌面构建 + 自动发 GitHub Release：tag v* 或手动触发
 name: Release Tauri
 
 on:
@@ -81,7 +81,6 @@ jobs:
             } catch (e) {
               body = String(e);
             }
-            // GitHub issue body limit ~65536; keep tail
             if (body.length > 50000) {
               body = body.slice(-50000);
             }
@@ -132,3 +131,36 @@ jobs:
           echo "Tauri build failed on ${{ matrix.platform }}"
           tail -n 80 tauri-build.log || true
           exit 1
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: zdream-macos-latest
+          path: bundles
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: zdream-windows-latest
+          path: bundles
+
+      - name: Flatten release assets
+        run: |
+          mkdir -p release-assets
+          find bundles -type f \( -name "*.dmg" -o -name "*.exe" -o -name "*.msi" \) -exec cp {} release-assets/ \;
+          echo "=== Release assets ==="
+          ls -lh release-assets/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
