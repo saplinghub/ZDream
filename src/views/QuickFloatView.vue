@@ -53,17 +53,32 @@ async function setWinSize(w: number, h: number) {
   } catch { /* ignore */ }
 }
 
+async function setWinPos(x: number, y: number) {
+  if (!isTauri()) return
+  try {
+    const { PhysicalPosition } = await import('@tauri-apps/api/dpi')
+    const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow')
+    await getCurrentWebviewWindow().setPosition(new PhysicalPosition(x, y))
+  } catch { /* ignore */ }
+}
+
 async function toggleCollapse() {
   collapsed.value = !collapsed.value
   if (collapsed.value) {
+    // 移到右下角再缩小
+    await setWinPos(window.screen.availWidth - 70, window.screen.availHeight - 70)
     await setWinSize(56, 56)
   } else {
+    // 展开时居中
     await setWinSize(340, 440)
-    // 展开后聚焦输入框
+    await setWinPos(
+      Math.max(0, (window.screen.availWidth - 340) / 2),
+      Math.max(0, (window.screen.availHeight - 440) / 2),
+    )
     setTimeout(() => {
       const el = document.querySelector<HTMLInputElement>('.qw-item-input')
       el?.focus()
-    }, 100)
+    }, 150)
   }
 }
 
@@ -190,20 +205,28 @@ function onEditRecord(id: string) { store.openEditRecord(id) }
   width: 100vw;
   height: 100vh;
   border-radius: 14px;
-  background: color-mix(in oklch, var(--surface) 92%, var(--accent));
-  border: 1px solid color-mix(in oklch, var(--border) 80%, var(--accent));
+  background: linear-gradient(135deg, #f0b90b 0%, #e8a300 100%);
+  border: 2px solid #d49400;
+  box-shadow: 0 4px 20px rgba(240, 185, 11, 0.45), 0 0 0 2px rgba(255,255,255,0.15) inset;
   display: grid;
   place-items: center;
   cursor: pointer;
   position: relative;
   overflow: hidden;
+  animation: dockPulse 2s ease-in-out infinite;
 }
 .dock-ball:hover {
-  border-color: var(--accent);
+  transform: scale(1.08);
+  box-shadow: 0 6px 28px rgba(240, 185, 11, 0.6), 0 0 0 2px rgba(255,255,255,0.25) inset;
+}
+@keyframes dockPulse {
+  0%, 100% { box-shadow: 0 4px 20px rgba(240, 185, 11, 0.45), 0 0 0 2px rgba(255,255,255,0.15) inset; }
+  50% { box-shadow: 0 4px 28px rgba(240, 185, 11, 0.7), 0 0 0 3px rgba(255,255,255,0.25) inset; }
 }
 .dock-ball-icon {
-  font-size: 22px;
+  font-size: 24px;
   line-height: 1;
+  filter: drop-shadow(0 2px 2px rgba(0,0,0,0.3));
 }
 .dock-ball-badge {
   position: absolute;
@@ -212,13 +235,14 @@ function onEditRecord(id: string) { store.openEditRecord(id) }
   min-width: 16px;
   height: 16px;
   border-radius: 8px;
-  background: var(--danger);
+  background: #e74c3c;
   color: #fff;
   font-size: 10px;
   font-weight: 700;
   display: grid;
   place-items: center;
   padding: 0 3px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
 }
 
 /* ─── 展开态 ─── */
