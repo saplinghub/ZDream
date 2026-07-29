@@ -512,14 +512,25 @@ async function onImportNative() {
             >
               下载并安装
             </button>
-            <button
-              v-else
-              class="btn btn-primary"
-              type="button"
-              @click="updater.openFile(updater.download.value.savedPath)"
-            >
-              一键安装
-            </button>
+            <div v-else style="display: flex; gap: 8px">
+              <button
+                class="btn btn-primary"
+                type="button"
+                @click="updater.silentInstall(updater.download.value.savedPath)"
+              >
+                静默安装
+              </button>
+              <button
+                class="btn btn-secondary"
+                type="button"
+                @click="updater.openFile(updater.download.value.savedPath)"
+              >
+                手动安装
+              </button>
+            </div>
+            <div v-if="updater.download.value.savedPath" style="font-size: 11px; color: var(--muted); margin-top: 6px">
+              静默安装：后台自动完成，安装后重启应用即可。手动安装：弹出安装向导逐步操作。
+            </div>
           </template>
         </div>
       </div>

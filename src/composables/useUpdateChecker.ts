@@ -160,9 +160,37 @@ export function useUpdateChecker() {
     }
   }
 
-  /** 打开文件（一键安装） */
+  /** 普通安装：打开安装包让用户手动点击 */
   async function openFile(path: string): Promise<boolean> {
     try {
+      const { open } = await import('@tauri-apps/plugin-shell')
+      await open(path)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /** 静默安装：后台运行安装程序，无需用户操作 */
+  async function silentInstall(path: string): Promise<boolean> {
+    try {
+      const { Command } = await import('@tauri-apps/plugin-shell')
+
+      if (path.endsWith('.exe')) {
+        // NSIS 静默安装 /S
+        const cmd = Command.create(path, ['/S'])
+        const output = await cmd.execute()
+        return output.code === 0
+      }
+
+      if (path.endsWith('.msi')) {
+        // MSI 静默安装
+        const cmd = Command.create('msiexec', ['/i', path, '/quiet', '/norestart'])
+        const output = await cmd.execute()
+        return output.code === 0
+      }
+
+      // .dmg 无法静默安装，降级为 open
       const { open } = await import('@tauri-apps/plugin-shell')
       await open(path)
       return true
@@ -264,5 +292,5 @@ export function useUpdateChecker() {
     abortController?.abort()
   }
 
-  return { status, download, check, downloadUpdate, openFile, cancelDownload, parseVersion, compareVersion, GITHUB_RELEASES }
+  return { status, download, check, downloadUpdate, openFile, silentInstall, cancelDownload, parseVersion, compareVersion, GITHUB_RELEASES }
 }
