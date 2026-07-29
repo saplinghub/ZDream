@@ -1,4 +1,5 @@
-# 双端桌面构建 + 自动发 GitHub Release：tag v* 或手动触发
+# Windows 桌面构建 + 自动发 GitHub Release：tag v* 或手动触发
+# macOS 暂时关闭，开发阶段节省构建时间，成熟后再放开
 name: Release Tauri
 
 on:
@@ -17,7 +18,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest
+          # - platform: macos-latest   # TODO: 开发成熟后恢复
           - platform: windows-latest
 
     runs-on: ${{ matrix.platform }}
@@ -138,11 +139,12 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Download macOS artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: zdream-macos-latest
-          path: bundles
+      # TODO: macOS 恢复时取消注释
+      # - name: Download macOS artifact
+      #   uses: actions/download-artifact@v4
+      #   with:
+      #     name: zdream-macos-latest
+      #     path: bundles
 
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
