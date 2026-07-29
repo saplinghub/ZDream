@@ -264,6 +264,7 @@ function tagClass(cat: string) {
               <div class="amt" :class="r.pos ? 'pos' : 'neg'">{{ r.amt }}</div>
               <div class="ops" style="opacity: 1; justify-content: flex-end; margin-top: 4px">
                 <button class="btn btn-ghost btn-sm" type="button" @click="copyRecord(r.id)">复制</button>
+                <button class="btn btn-ghost btn-sm" type="button" @click="store.openEditRecord(r.id)">编辑</button>
                 <button class="btn btn-ghost btn-sm" type="button" @click="store.deleteRecord(r.id)">删</button>
               </div>
             </div>

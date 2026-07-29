@@ -90,6 +90,8 @@ export const useAppStore = defineStore('app', () => {
   const showSoldModal = ref(false)
   const showBuyModal = ref(false)
   const soldTargetId = ref<string | null>(null)
+  const showEditModal = ref(false)
+  const editingRecordId = ref<string | null>(null)
   const toastMsg = ref('')
   const toastVisible = ref(false)
   let toastTimer: ReturnType<typeof setTimeout> | null = null
@@ -477,7 +479,94 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
-  // —— 藏宝阁 ——
+  const editingRecord = computed(() => {
+    if (!editingRecordId.value) return null
+    return records.value.find((r) => r.id === editingRecordId.value) ?? null
+  })
+
+  function openEditRecord(id: string) {
+    editingRecordId.value = id
+    showEditModal.value = true
+  }
+
+  function updateRecord(input: {
+    accountId?: string
+    item?: string
+    qty?: number
+    price?: number
+    io?: 'in' | 'out'
+    sub?: string
+    note?: string
+    cardType?: string
+    spendType?: string
+    amount?: number
+    points?: number
+    name?: string
+  }) {
+    const r = editingRecord.value
+    if (!r) return false
+
+    const a = input.accountId ? accountById(input.accountId) : null
+    const accountName = a?.name ?? r.accountName
+    const accountId = a?.id ?? r.accountId
+
+    if (r.cat === 'game') {
+      const item = input.item ?? (r.meta?.item as string) ?? ''
+      const qty = input.qty ?? (r.meta?.qty as number) ?? 1
+      const price = input.price ?? (r.meta?.price as number) ?? 0
+      const io = input.io ?? (r.pos ? 'in' : 'out')
+      const sub = input.sub ?? (r.meta?.sub as string) ?? ''
+      const total = qty * price
+      const signed = io === 'in' ? total : -total
+      r.accountId = accountId
+      r.accountName = accountName
+      r.tag = `${io === 'in' ? '收入' : '消耗'}·${sub}`
+      r.sum = input.note?.trim() || `${item} ×${qty}`
+      r.amt = fmtMh(signed)
+      r.pos = io === 'in'
+      r.raw = signed
+      r.meta = { item, qty, price, sub, note: input.note || '' }
+    } else if (r.cat === 'card') {
+      const cardType = input.cardType ?? (r.meta?.cardType as string) ?? ''
+      const amt = Math.abs(input.amount ?? Math.abs(r.raw))
+      r.accountId = accountId
+      r.accountName = accountName
+      r.tag = `点卡·${cardType}`
+      r.sum = input.note?.trim() || `${cardType} ${amt} 元`
+      r.amt = fmtRmb(-amt)
+      r.raw = -amt
+      r.meta = { cardType, points: input.points ?? (r.meta?.points as number) ?? 0 }
+    } else if (r.cat === 'spend') {
+      const spendType = input.spendType ?? (r.meta?.spendType as string) ?? ''
+      const amt = Math.abs(input.amount ?? Math.abs(r.raw))
+      r.accountId = accountId
+      r.accountName = accountName
+      r.tag = `消费·${spendType}`
+      r.sum = input.note?.trim() || `${spendType} ${amt} 元`
+      r.amt = fmtRmb(-amt)
+      r.pos = false
+      r.raw = -amt
+      r.meta = { spendType }
+    } else if (r.cat === 'cbg') {
+      const name = input.name ?? (r.meta?.name as string) ?? r.sum
+      const price = input.price ?? (r.meta?.price as number) ?? (r.meta?.soldPrice as number) ?? Math.abs(r.raw)
+      r.accountId = accountId
+      r.accountName = accountName
+      r.sum = input.note?.trim() || name
+      r.meta = { ...r.meta, name, note: input.note || '' }
+      if (r.pos) {
+        r.raw = price
+      } else {
+        r.raw = -price
+        r.amt = fmtRmb(-price)
+      }
+    }
+
+    showEditModal.value = false
+    editingRecordId.value = null
+    toast('已更新记录')
+    return true
+  }
   function listItem(input: { accountId: string; name: string; price: number }) {
     const a = accountById(input.accountId)
     if (!a) {
@@ -621,6 +710,51 @@ export const useAppStore = defineStore('app', () => {
       onlineN: onlineCount.value,
       accountN: accounts.value.length,
     }
+  }
+
+  function trendData(key: DateRangeKey = dateRange.value, unit: 'mh' | 'rmb' = 'mh') {
+    const list = recordsInRange(key)
+    const start = rangeStart(key)
+    const end = Date.now()
+
+    // 确定分桶数量
+    let buckets: number
+    if (key === 'today') {
+      buckets = 24 // 按小时
+    } else if (key === 'week') {
+      buckets = 7
+    } else if (key === 'month') {
+      buckets = Math.min(31, Math.ceil((end - start) / 86400000))
+    } else {
+      buckets = 10 // 30d 按约 3 天一桶
+    }
+
+    const sliceMs = Math.max(1, Math.ceil((end - start) / buckets))
+    const income: number[] = new Array(buckets).fill(0)
+    const spend: number[] = new Array(buckets).fill(0)
+    const labels: string[] = []
+
+    for (let i = 0; i < buckets; i++) {
+      const t = new Date(start + i * sliceMs)
+      if (key === 'today') {
+        labels.push(`${String(t.getHours()).padStart(2, '0')}:00`)
+      } else {
+        labels.push(`${t.getMonth() + 1}/${t.getDate()}`)
+      }
+    }
+
+    for (const r of list) {
+      if (r.unit !== unit) continue
+      const t = new Date(r.time).getTime()
+      const idx = Math.min(buckets - 1, Math.floor((t - start) / sliceMs))
+      if (r.raw >= 0) {
+        income[idx] += r.raw
+      } else {
+        spend[idx] += Math.abs(r.raw)
+      }
+    }
+
+    return { labels, income, spend }
   }
 
   function accountCompare(key: DateRangeKey = dateRange.value) {
@@ -795,6 +929,9 @@ export const useAppStore = defineStore('app', () => {
     showLiveFloat,
     showListModal,
     showSoldModal,
+    showEditModal,
+    editingRecordId,
+    editingRecord,
     showBuyModal,
     soldTargetId,
     toastMsg,
@@ -827,6 +964,8 @@ export const useAppStore = defineStore('app', () => {
     addCardRecord,
     addSpendRecord,
     deleteRecord,
+    openEditRecord,
+    updateRecord,
     listItem,
     buyItem,
     openSold,
@@ -834,6 +973,7 @@ export const useAppStore = defineStore('app', () => {
     confirmSold,
     delist,
     dashboardStats,
+    trendData,
     accountCompare,
     cbgStats,
     exportJson,

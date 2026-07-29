@@ -19,6 +19,42 @@ const ranges: { key: DateRangeKey; label: string }[] = [
 
 const stats = computed(() => store.dashboardStats(store.dateRange))
 const compare = computed(() => store.accountCompare(store.dateRange))
+const trend = computed(() => store.trendData(store.dateRange, trendUnit.value))
+
+const trendPoints = computed(() => {
+  const d = trend.value
+  const maxVal = Math.max(...d.income, ...d.spend, 1)
+  const W = 280
+  const H = 120
+  const pad = 12
+  const h = H - pad * 2
+  const n = d.income.length
+
+  function toY(v: number) {
+    return H - pad - (v / maxVal) * h
+  }
+
+  function toX(i: number) {
+    if (n <= 1) return W / 2
+    return (i / (n - 1)) * W
+  }
+
+  return {
+    incomePts: d.income.map((v, i) => `${toX(i)},${toY(v)}`).join(' '),
+    spendPts: d.spend.map((v, i) => `${toX(i)},${toY(v)}`).join(' '),
+    fillPath:
+      d.income.length > 0
+        ? `M${toX(0)},${toY(d.income[0])} ` +
+          d.income
+            .slice(1)
+            .map((v, i) => `L${toX(i + 1)},${toY(v)}`)
+            .join(' ') +
+          ` L${toX(n - 1)},${H} L0,${H} Z`
+        : '',
+    labels: d.labels,
+    hasData: d.income.some((v) => v > 0) || d.spend.some((v) => v > 0),
+  }
+})
 const maxBar = computed(() => {
   const m = Math.max(...compare.value.flatMap((c) => [c.income, c.spend]), 1)
   return m
@@ -172,7 +208,13 @@ function mhDisplay(n: number) {
             <button type="button" :class="{ active: trendUnit === 'rmb' }" @click="trendUnit = 'rmb'">RMB</button>
           </div>
         </div>
-        <svg class="spark" viewBox="0 0 280 140" preserveAspectRatio="none" aria-label="收支趋势图">
+        <svg
+          v-if="trendPoints.hasData"
+          class="spark"
+          viewBox="0 0 280 140"
+          preserveAspectRatio="none"
+          aria-label="收支趋势图"
+        >
           <defs>
             <linearGradient id="gIn" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.25" />
@@ -182,26 +224,26 @@ function mhDisplay(n: number) {
           <line x1="0" y1="35" x2="280" y2="35" stroke="var(--border)" stroke-width="1" />
           <line x1="0" y1="70" x2="280" y2="70" stroke="var(--border)" stroke-width="1" />
           <line x1="0" y1="105" x2="280" y2="105" stroke="var(--border)" stroke-width="1" />
-          <path
-            d="M0,90 L40,78 L80,82 L120,55 L160,60 L200,42 L240,48 L280,30 L280,140 L0,140 Z"
-            fill="url(#gIn)"
-          />
+          <path :d="trendPoints.fillPath" fill="url(#gIn)" />
           <polyline
             fill="none"
             stroke="var(--accent)"
             stroke-width="2"
-            points="0,90 40,78 80,82 120,55 160,60 200,42 240,48 280,30"
+            :points="trendPoints.incomePts"
           />
           <polyline
             fill="none"
             stroke="var(--danger)"
             stroke-width="2"
             stroke-dasharray="4 3"
-            points="0,100 40,95 80,88 120,92 160,85 200,98 240,90 280,86"
+            :points="trendPoints.spendPts"
           />
         </svg>
+        <div v-else class="empty" style="padding: 20px 0">
+          暂无 {{ trendUnit === 'mh' ? '梦幻币' : 'RMB' }} 数据
+        </div>
         <div class="meta" style="margin-top: 4px">
-          绿实线收入 · 红虚线消耗 · {{ trendUnit === 'mh' ? '梦幻币' : 'RMB' }}示意
+          绿实线收入 · 红虚线消耗 · {{ trendUnit === 'mh' ? '梦幻币' : 'RMB' }}
         </div>
       </div>
     </div>

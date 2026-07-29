@@ -7,6 +7,7 @@ import OfflineModal from '@/components/modals/OfflineModal.vue'
 import ListModal from '@/components/modals/ListModal.vue'
 import SoldModal from '@/components/modals/SoldModal.vue'
 import BuyModal from '@/components/modals/BuyModal.vue'
+import EditRecordModal from '@/components/modals/EditRecordModal.vue'
 import QuickFloat from '@/components/modals/QuickFloat.vue'
 import LiveFloat from '@/components/modals/LiveFloat.vue'
 import AppToast from '@/components/ui/AppToast.vue'
@@ -59,6 +60,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
     <ListModal />
     <SoldModal />
     <BuyModal />
+    <EditRecordModal />
     <QuickFloat />
     <!-- 浏览器降级：无 Tauri 时仍用页内浮层 -->
     <LiveFloat v-if="!isTauri()" />

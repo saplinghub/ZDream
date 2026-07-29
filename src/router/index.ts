@@ -30,6 +30,12 @@ const router = createRouter({
       meta: { title: '藏宝阁' },
     },
     {
+      path: '/sessions',
+      name: 'sessions',
+      component: () => import('@/views/SessionsView.vue'),
+      meta: { title: '会话' },
+    },
+    {
       path: '/settings',
       name: 'settings',
       component: () => import('@/views/SettingsView.vue'),
