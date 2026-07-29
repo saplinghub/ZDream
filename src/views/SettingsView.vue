@@ -34,19 +34,6 @@ async function doDownload(assetUrl: string, fileName: string) {
   await updater.downloadUpdate(assetUrl, fileName)
 }
 
-// 自动选择最佳安装包（Windows 优先 .exe，macOS 用 .dmg）
-function bestAsset() {
-  const assets = updater.status.value.info?.assets ?? []
-  if (!assets.length) return null
-  const exe = assets.find((a) => a.name.endsWith('.exe'))
-  if (exe) return exe
-  const msi = assets.find((a) => a.name.endsWith('.msi'))
-  if (msi) return msi
-  const dmg = assets.find((a) => a.name.endsWith('.dmg'))
-  if (dmg) return dmg
-  return assets[0]
-}
-
 onMounted(() => {
   // 启动后 5 秒自动检查一次
   setTimeout(() => {
@@ -483,10 +470,19 @@ async function onImportNative() {
           {{ updater.download.value.error }}
         </div>
 
-        <!-- 文件列表 + 下载按钮 -->
-        <div v-if="updater.status.value.info?.assets.length && !updater.download.value.savedPath" style="margin-bottom: 12px">
-          <div v-for="a in updater.status.value.info.assets" :key="a.name" class="row" style="gap: 8px; align-items: center; margin-bottom: 4px">
-            <span style="flex: 1; font-size: 13px">{{ a.name }}</span>
+        <!-- 推荐安装包 + 下载按钮 -->
+        <div
+          v-if="updater.status.value.info?.myAssets.length && !updater.download.value.savedPath"
+          style="margin-bottom: 12px"
+        >
+          <p class="meta" style="font-size: 11px; margin-bottom: 6px">
+            当前平台推荐安装包
+          </p>
+          <div v-for="a in updater.status.value.info.myAssets" :key="a.name" class="row" style="gap: 8px; align-items: center; margin-bottom: 4px">
+            <span style="flex: 1; font-size: 13px">
+              {{ a.name }}
+              <span v-if="updater.status.value.info.best?.name === a.name" style="color: var(--accent); font-size: 11px">· 推荐</span>
+            </span>
             <span class="meta" style="font-size: 11px">{{ (a.size / 1024 / 1024).toFixed(1) }} MB</span>
             <button
               class="btn btn-primary btn-sm"
@@ -507,12 +503,12 @@ async function onImportNative() {
         </div>
         <div class="actions">
           <button class="btn btn-secondary" type="button" @click="showUpdateModal = false">关闭</button>
-          <template v-if="bestAsset() && !updater.download.value.downloading">
+          <template v-if="updater.status.value.info?.best && !updater.download.value.downloading">
             <button
               v-if="!updater.download.value.savedPath"
               class="btn btn-primary"
               type="button"
-              @click="doDownload(bestAsset()!.url, bestAsset()!.name)"
+              @click="doDownload(updater.status.value.info.best.url, updater.status.value.info.best.name)"
             >
               下载并安装
             </button>

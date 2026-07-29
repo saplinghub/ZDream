@@ -1,12 +1,23 @@
 import { ref } from 'vue'
 
+export interface UpdateAsset {
+  name: string
+  url: string
+  size: number
+}
+
 export interface UpdateInfo {
   currentVersion: string
   latestVersion: string
   hasUpdate: boolean
   body: string
   downloadUrl: string
-  assets: { name: string; url: string; size: number }[]
+  /** 所有安装包 */
+  assets: UpdateAsset[]
+  /** 当前平台推荐的安装包 */
+  myAssets: UpdateAsset[]
+  /** 最佳推荐（优先 .exe > .msi > .dmg） */
+  best: UpdateAsset | null
 }
 
 export interface UpdateStatus {
@@ -17,7 +28,7 @@ export interface UpdateStatus {
 
 export interface DownloadState {
   downloading: boolean
-  progress: number // 0-100
+  progress: number
   fileName: string
   savedPath: string
   error: string
@@ -40,6 +51,34 @@ function compareVersion(a: string, b: string): number {
     if (na < nb) return -1
   }
   return 0
+}
+
+/** 检测当前运行平台 */
+function detectPlatform(): 'windows' | 'macos' | 'unknown' {
+  if (typeof navigator === 'undefined') return 'unknown'
+  const p = navigator.platform?.toLowerCase() || ''
+  if (p.includes('win')) return 'windows'
+  if (p.includes('mac')) return 'macos'
+  const ua = navigator.userAgent?.toLowerCase() || ''
+  if (ua.includes('win')) return 'windows'
+  if (ua.includes('mac')) return 'macos'
+  return 'unknown'
+}
+
+/** 根据平台过滤安装包 */
+function filterMyAssets(assets: UpdateAsset[]): { myAssets: UpdateAsset[]; best: UpdateAsset | null } {
+  const platform = detectPlatform()
+  if (platform === 'windows') {
+    const my = assets.filter((a) => a.name.endsWith('.exe') || a.name.endsWith('.msi'))
+    const best = my.find((a) => a.name.endsWith('.exe')) || my.find((a) => a.name.endsWith('.msi')) || null
+    return { myAssets: my, best }
+  }
+  if (platform === 'macos') {
+    const my = assets.filter((a) => a.name.endsWith('.dmg'))
+    return { myAssets: my, best: my[0] || null }
+  }
+  // 未知平台：全显示，最好选第一个
+  return { myAssets: assets, best: assets[0] || null }
 }
 
 export function useUpdateChecker() {
@@ -93,17 +132,23 @@ export function useUpdateChecker() {
       const latest = parseVersion(release.tag_name || 'v0.0.0')
       const hasUpdate = compareVersion(latest, parseVersion(current)) > 0
 
+      const assets: UpdateAsset[] = (release.assets || []).map((a: Record<string, unknown>) => ({
+        name: String(a.name || ''),
+        url: String(a.browser_download_url || ''),
+        size: Number(a.size || 0),
+      }))
+
+      const { myAssets, best } = filterMyAssets(assets)
+
       const info: UpdateInfo = {
         currentVersion: current,
         latestVersion: release.tag_name || latest,
         hasUpdate,
         body: release.body || '',
         downloadUrl: release.html_url || GITHUB_RELEASES,
-        assets: (release.assets || []).map((a: Record<string, unknown>) => ({
-          name: String(a.name || ''),
-          url: String(a.browser_download_url || ''),
-          size: Number(a.size || 0),
-        })),
+        assets,
+        myAssets,
+        best,
       }
 
       status.value = { checking: false, error: '', info }
@@ -115,14 +160,13 @@ export function useUpdateChecker() {
     }
   }
 
-  /** 打开文件（用于安装包下载后一键启动安装） */
+  /** 打开文件（一键安装） */
   async function openFile(path: string): Promise<boolean> {
     try {
       const { open } = await import('@tauri-apps/plugin-shell')
       await open(path)
       return true
     } catch {
-      // 浏览器降级：无法打开
       return false
     }
   }
@@ -133,13 +177,24 @@ export function useUpdateChecker() {
     abortController = new AbortController()
 
     try {
-      const res = await fetch(assetUrl, { signal: abortController.signal })
-      if (!res.ok) throw new Error(`下载失败 HTTP ${res.status}`)
+      const res = await fetch(assetUrl, {
+        signal: abortController.signal,
+        // GitHub release assets 可能重定向，不设 redirect: 'manual'
+      })
+
+      if (!res.ok) {
+        const msg = res.status === 404
+          ? '文件不存在（可能构建中）'
+          : res.status === 403
+            ? '访问被拒绝（GitHub API 限流）'
+            : `下载失败 HTTP ${res.status}`
+        throw new Error(msg)
+      }
 
       const contentLength = Number(res.headers.get('content-length') || 0)
-      const reader = res.body?.getReader()
-      if (!reader) throw new Error('无法读取响应流')
+      if (!res.body) throw new Error('响应无数据')
 
+      const reader = res.body.getReader()
       const chunks: Uint8Array[] = []
       let received = 0
 
@@ -153,7 +208,6 @@ export function useUpdateChecker() {
         }
       }
 
-      // 合并二进制数据
       const totalLen = chunks.reduce((s, c) => s + c.length, 0)
       const merged = new Uint8Array(totalLen)
       let offset = 0
@@ -162,7 +216,7 @@ export function useUpdateChecker() {
         offset += c.length
       }
 
-      // Tauri 环境：写入文件
+      // Tauri 环境：写入 Downloads 文件夹
       try {
         const { writeFile } = await import('@tauri-apps/plugin-fs')
         const { join, downloadDir } = await import('@tauri-apps/api/path')
@@ -178,7 +232,7 @@ export function useUpdateChecker() {
         }
         return path
       } catch {
-        // 浏览器降级：触发下载
+        // 浏览器降级
         const blob = new Blob([merged], { type: 'application/octet-stream' })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
@@ -200,7 +254,7 @@ export function useUpdateChecker() {
         download.value = { downloading: false, progress: 0, fileName: '', savedPath: '', error: '已取消' }
         return null
       }
-      const msg = e instanceof Error ? e.message : '未知错误'
+      const msg = e instanceof Error ? e.message : '下载失败：网络不可用'
       download.value = { downloading: false, progress: 0, fileName: '', savedPath: '', error: msg }
       return null
     }
