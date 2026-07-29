@@ -99,6 +99,8 @@ export interface AppSettings {
   hotkey: string
   theme: string
   customHex: string
+  /** 业务数据存储目录（空 = 默认 AppData） */
+  dataDir: string
 }
 
 /** 在线会话记录 */

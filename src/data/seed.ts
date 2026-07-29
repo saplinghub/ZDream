@@ -265,4 +265,5 @@ export const seedSettings: AppSettings = {
   hotkey: 'Ctrl+Shift+R',
   theme: 'mint',
   customHex: '#3d9b6e',
+  dataDir: '',
 }

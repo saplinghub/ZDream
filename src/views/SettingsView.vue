@@ -322,6 +322,15 @@ async function onImportNative() {
           <label>窗内快捷记账</label>
           <input class="input" value="Ctrl+Shift+R" readonly />
         </div>
+        <div class="field" style="margin-bottom: 10px">
+          <label>数据存储目录（空白则使用默认 AppData 目录）</label>
+          <div class="row" style="gap: 8px">
+            <input v-model="store.settings.dataDir" class="input" placeholder="D:\ZDream\data" style="flex:1" />
+          </div>
+          <div class="meta" style="font-size: 11px">
+            截图等资源文件将存于此目录。修改后需重启生效。
+          </div>
+        </div>
         <div class="row" style="gap: 8px; flex-wrap: wrap">
           <button class="btn btn-secondary btn-sm" type="button" @click="store.exportJson">导出 JSON</button>
           <button class="btn btn-secondary btn-sm" type="button" @click="store.exportCsv">导出 CSV</button>
@@ -507,9 +516,14 @@ async function onImportNative() {
             >
               下载并安装
             </button>
-            <span v-else class="meta" style="font-size: 12px">
-              打开文件位置运行安装即可
-            </span>
+            <button
+              v-else
+              class="btn btn-primary"
+              type="button"
+              @click="updater.openFile(updater.download.value.savedPath)"
+            >
+              一键安装
+            </button>
           </template>
         </div>
       </div>

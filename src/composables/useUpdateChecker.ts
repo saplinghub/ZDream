@@ -115,6 +115,18 @@ export function useUpdateChecker() {
     }
   }
 
+  /** 打开文件（用于安装包下载后一键启动安装） */
+  async function openFile(path: string): Promise<boolean> {
+    try {
+      const { open } = await import('@tauri-apps/plugin-shell')
+      await open(path)
+      return true
+    } catch {
+      // 浏览器降级：无法打开
+      return false
+    }
+  }
+
   /** 应用内下载安装包，带进度条 */
   async function downloadUpdate(assetUrl: string, fileName: string): Promise<string | null> {
     download.value = { downloading: true, progress: 0, fileName, savedPath: '', error: '' }
@@ -198,5 +210,5 @@ export function useUpdateChecker() {
     abortController?.abort()
   }
 
-  return { status, download, check, downloadUpdate, cancelDownload, parseVersion, compareVersion, GITHUB_RELEASES }
+  return { status, download, check, downloadUpdate, openFile, cancelDownload, parseVersion, compareVersion, GITHUB_RELEASES }
 }
