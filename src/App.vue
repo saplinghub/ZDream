@@ -31,7 +31,7 @@ function onKey(e: KeyboardEvent) {
   if (isHotkey) {
     e.preventDefault()
     if (isTauri()) {
-      openQuickFloat(true)
+      openQuickFloat()
     } else {
       // 浏览器降级：页内浮层
       store.showFloatWin = !store.showFloatWin

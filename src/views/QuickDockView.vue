@@ -2,7 +2,7 @@
 import { computed, onMounted } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { applyDesktopChrome, isTauri } from '@/platform/desktop'
-import { expandQuickFloat } from '@/platform/windows'
+import { openQuickFloat } from '@/platform/windows'
 
 const store = useAppStore()
 const count = computed(() => Math.min(store.quickRecordCount, 99))
@@ -15,7 +15,7 @@ onMounted(() => {
 
 async function expand() {
   if (isTauri()) {
-    await expandQuickFloat()
+    await openQuickFloat()
   } else {
     store.showQuickDock = false
     store.showFloatWin = true

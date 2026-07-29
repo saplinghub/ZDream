@@ -111,7 +111,7 @@ async function onOpenLiveFloat() {
             <button
               class="btn btn-secondary btn-sm btn-block"
               type="button"
-              @click="isTauri() ? openQuickFloat(true) : (store.showFloatWin = true)"
+              @click="isTauri() ? openQuickFloat() : (store.showFloatWin = true)"
             >
               快捷记账
             </button>
