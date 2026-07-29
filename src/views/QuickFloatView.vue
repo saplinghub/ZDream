@@ -53,28 +53,12 @@ async function setWinSize(w: number, h: number) {
   } catch { /* ignore */ }
 }
 
-async function setWinPos(x: number, y: number) {
-  if (!isTauri()) return
-  try {
-    const { PhysicalPosition } = await import('@tauri-apps/api/dpi')
-    const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow')
-    await getCurrentWebviewWindow().setPosition(new PhysicalPosition(x, y))
-  } catch { /* ignore */ }
-}
-
 async function toggleCollapse() {
   collapsed.value = !collapsed.value
   if (collapsed.value) {
-    // 移到右下角再缩小
-    await setWinPos(window.screen.availWidth - 70, window.screen.availHeight - 70)
-    await setWinSize(56, 56)
+    await setWinSize(60, 60)
   } else {
-    // 展开时居中
     await setWinSize(340, 440)
-    await setWinPos(
-      Math.max(0, (window.screen.availWidth - 340) / 2),
-      Math.max(0, (window.screen.availHeight - 440) / 2),
-    )
     setTimeout(() => {
       const el = document.querySelector<HTMLInputElement>('.qw-item-input')
       el?.focus()
@@ -204,29 +188,30 @@ function onEditRecord(id: string) { store.openEditRecord(id) }
 .dock-ball {
   width: 100vw;
   height: 100vh;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #f0b90b 0%, #e8a300 100%);
-  border: 2px solid #d49400;
-  box-shadow: 0 4px 20px rgba(240, 185, 11, 0.45), 0 0 0 2px rgba(255,255,255,0.15) inset;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #ffd700, #e8a300 60%, #c78200 100%);
+  box-shadow:
+    0 0 0 3px rgba(255, 215, 0, 0.35),
+    0 4px 16px rgba(0, 0, 0, 0.35),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.2),
+    inset 0 2px 4px rgba(255, 255, 255, 0.3);
   display: grid;
   place-items: center;
   cursor: pointer;
   position: relative;
   overflow: hidden;
-  animation: dockPulse 2s ease-in-out infinite;
+  transition: transform 0.15s;
 }
 .dock-ball:hover {
-  transform: scale(1.08);
-  box-shadow: 0 6px 28px rgba(240, 185, 11, 0.6), 0 0 0 2px rgba(255,255,255,0.25) inset;
+  transform: scale(1.06);
 }
-@keyframes dockPulse {
-  0%, 100% { box-shadow: 0 4px 20px rgba(240, 185, 11, 0.45), 0 0 0 2px rgba(255,255,255,0.15) inset; }
-  50% { box-shadow: 0 4px 28px rgba(240, 185, 11, 0.7), 0 0 0 3px rgba(255,255,255,0.25) inset; }
+.dock-ball:active {
+  transform: scale(0.95);
 }
 .dock-ball-icon {
-  font-size: 24px;
+  font-size: 22px;
   line-height: 1;
-  filter: drop-shadow(0 2px 2px rgba(0,0,0,0.3));
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4));
 }
 .dock-ball-badge {
   position: absolute;
@@ -234,7 +219,7 @@ function onEditRecord(id: string) { store.openEditRecord(id) }
   right: 2px;
   min-width: 16px;
   height: 16px;
-  border-radius: 8px;
+  border-radius: 50%;
   background: #e74c3c;
   color: #fff;
   font-size: 10px;
@@ -242,7 +227,7 @@ function onEditRecord(id: string) { store.openEditRecord(id) }
   display: grid;
   place-items: center;
   padding: 0 3px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
 }
 
 /* ─── 展开态 ─── */
