@@ -30,6 +30,23 @@ async function checkUpdate() {
   }
 }
 
+async function doDownload(assetUrl: string, fileName: string) {
+  await updater.downloadUpdate(assetUrl, fileName)
+}
+
+// 自动选择最佳安装包（Windows 优先 .exe，macOS 用 .dmg）
+function bestAsset() {
+  const assets = updater.status.value.info?.assets ?? []
+  if (!assets.length) return null
+  const exe = assets.find((a) => a.name.endsWith('.exe'))
+  if (exe) return exe
+  const msi = assets.find((a) => a.name.endsWith('.msi'))
+  if (msi) return msi
+  const dmg = assets.find((a) => a.name.endsWith('.dmg'))
+  if (dmg) return dmg
+  return assets[0]
+}
+
 onMounted(() => {
   // 启动后 5 秒自动检查一次
   setTimeout(() => {
@@ -371,6 +388,37 @@ async function onImportNative() {
           </button>
         </div>
       </div>
+
+      <!-- 数据统计与清理 -->
+      <div class="card settings-block stack" style="grid-column: 1 / -1">
+        <h3>数据统计</h3>
+        <p class="meta" style="margin: 0 0 8px">
+          数据存储在 <code>%APPDATA%/com.saplinghub.zdream/zdream.db</code>（SQLite）<br />
+          浏览器开发时使用 localStorage，所有数据均为文本 JSON，体积很小。
+        </p>
+        <div class="grid-4" style="margin-bottom: 8px">
+          <div class="card stat-card">
+            <div class="label">流水记录</div>
+            <div class="value" style="font-size: 18px">{{ store.records.length }}</div>
+          </div>
+          <div class="card stat-card">
+            <div class="label">会话记录</div>
+            <div class="value" style="font-size: 18px">{{ store.sessions.length }}</div>
+          </div>
+          <div class="card stat-card">
+            <div class="label">动态事件</div>
+            <div class="value" style="font-size: 18px">{{ store.events.length }}</div>
+          </div>
+          <div class="card stat-card">
+            <div class="label">物品/模板</div>
+            <div class="value" style="font-size: 18px">{{ store.items.length }}/{{ store.templates.length }}</div>
+          </div>
+        </div>
+        <p class="meta" style="font-size: 11px">
+          以 1000 条流水为例，JSON 体积约 300KB。正常使用几年也很难超过几十 MB。<br />
+          截图功能上线后会单独管理存储目录，不会无限制膨胀。
+        </p>
+      </div>
     </div>
 
     <!-- 更新详情弹窗 -->
@@ -378,35 +426,91 @@ async function onImportNative() {
       <div class="modal" style="max-width: 500px">
         <p class="eyebrow">UPDATE</p>
         <h2>新版本 {{ updater.status.value.info?.latestVersion }}</h2>
+
+        <!-- Release Notes -->
         <div
           v-if="updater.status.value.info?.body"
-          style="white-space: pre-line; font-size: 13px; max-height: 300px; overflow: auto; margin: 12px 0; padding: 12px; background: var(--bg); border-radius: 8px"
+          style="white-space: pre-line; font-size: 13px; max-height: 200px; overflow: auto; margin: 12px 0; padding: 12px; background: var(--bg); border-radius: 8px"
         >
           {{ updater.status.value.info.body }}
         </div>
-        <div v-if="updater.status.value.info?.assets.length" style="margin-bottom: 12px">
+
+        <!-- 下载进度条 -->
+        <div
+          v-if="updater.download.value.downloading"
+          style="margin-bottom: 12px; padding: 12px; background: var(--bg); border-radius: 8px"
+        >
+          <div style="font-size: 13px; margin-bottom: 8px">
+            正在下载 {{ updater.download.value.fileName }} ...
+          </div>
+          <div style="height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin-bottom: 6px">
+            <div
+              style="height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.3s"
+              :style="{ width: updater.download.value.progress + '%' }"
+            />
+          </div>
+          <div style="font-size: 12px; color: var(--muted); display: flex; justify-content: space-between">
+            <span>{{ updater.download.value.progress }}%</span>
+            <button class="btn btn-ghost btn-sm" type="button" @click="updater.cancelDownload()">取消</button>
+          </div>
+        </div>
+
+        <!-- 下载完成 -->
+        <div
+          v-if="updater.download.value.savedPath && !updater.download.value.downloading"
+          style="margin-bottom: 12px; padding: 12px; background: color-mix(in oklch, var(--accent) 8%, var(--surface)); border-radius: 8px; border: 1px solid var(--accent)"
+        >
+          <div style="font-weight: 600; margin-bottom: 4px">✅ 下载完成</div>
+          <div style="font-size: 11px; color: var(--muted); word-break: break-all">
+            {{ updater.download.value.savedPath }}
+          </div>
+        </div>
+
+        <!-- 下载错误 -->
+        <div
+          v-if="updater.download.value.error"
+          style="margin-bottom: 12px; padding: 8px 12px; background: color-mix(in oklch, var(--danger) 8%, var(--surface)); border-radius: 8px; color: var(--danger); font-size: 13px"
+        >
+          {{ updater.download.value.error }}
+        </div>
+
+        <!-- 文件列表 + 下载按钮 -->
+        <div v-if="updater.status.value.info?.assets.length && !updater.download.value.savedPath" style="margin-bottom: 12px">
           <div v-for="a in updater.status.value.info.assets" :key="a.name" class="row" style="gap: 8px; align-items: center; margin-bottom: 4px">
             <span style="flex: 1; font-size: 13px">{{ a.name }}</span>
             <span class="meta" style="font-size: 11px">{{ (a.size / 1024 / 1024).toFixed(1) }} MB</span>
-            <a :href="a.url" target="_blank" class="btn btn-secondary btn-sm">下载</a>
+            <button
+              class="btn btn-primary btn-sm"
+              type="button"
+              :disabled="updater.download.value.downloading"
+              @click="doDownload(a.url, a.name)"
+            >
+              {{ updater.download.value.downloading && updater.download.value.fileName === a.name ? '下载中...' : '下载' }}
+            </button>
           </div>
         </div>
-        <div class="meta" style="margin-bottom: 12px">
-          当前版本 v{{ updater.status.value.info?.currentVersion }} &rarr;
-          {{ updater.status.value.info?.latestVersion }}
+
+        <div class="meta" style="margin-bottom: 12px; font-size: 12px">
+          当前版本 v{{ updater.status.value.info?.currentVersion }}
+          &rarr; {{ updater.status.value.info?.latestVersion }}
           <br />
-          安装包会覆盖升级，数据不受影响（存储在 AppData 目录）
+          安装包会覆盖升级，数据不受影响
         </div>
         <div class="actions">
           <button class="btn btn-secondary" type="button" @click="showUpdateModal = false">关闭</button>
-          <a
-            :href="updater.status.value.info?.downloadUrl || '#'"
-            target="_blank"
-            class="btn btn-primary"
-            style="text-decoration: none"
-          >
-            前往 GitHub 下载
-          </a>
+          <template v-if="bestAsset() && !updater.download.value.downloading">
+            <button
+              v-if="!updater.download.value.savedPath"
+              class="btn btn-primary"
+              type="button"
+              @click="doDownload(bestAsset()!.url, bestAsset()!.name)"
+            >
+              下载并安装
+            </button>
+            <span v-else class="meta" style="font-size: 12px">
+              打开文件位置运行安装即可
+            </span>
+          </template>
         </div>
       </div>
     </div>

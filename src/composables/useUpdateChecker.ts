@@ -15,8 +15,32 @@ export interface UpdateStatus {
   info: UpdateInfo | null
 }
 
+export interface DownloadState {
+  downloading: boolean
+  progress: number // 0-100
+  fileName: string
+  savedPath: string
+  error: string
+}
+
 const GITHUB_API = 'https://api.github.com/repos/saplinghub/ZDream/releases/latest'
 const GITHUB_RELEASES = 'https://github.com/saplinghub/ZDream/releases/latest'
+
+function parseVersion(tag: string): string {
+  return tag.replace(/^v/, '')
+}
+
+function compareVersion(a: string, b: string): number {
+  const pa = a.split('.').map(Number)
+  const pb = b.split('.').map(Number)
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const na = pa[i] || 0
+    const nb = pb[i] || 0
+    if (na > nb) return 1
+    if (na < nb) return -1
+  }
+  return 0
+}
 
 export function useUpdateChecker() {
   const status = ref<UpdateStatus>({
@@ -25,28 +49,21 @@ export function useUpdateChecker() {
     info: null,
   })
 
-  function parseVersion(tag: string): string {
-    return tag.replace(/^v/, '')
-  }
+  const download = ref<DownloadState>({
+    downloading: false,
+    progress: 0,
+    fileName: '',
+    savedPath: '',
+    error: '',
+  })
 
-  function compareVersion(a: string, b: string): number {
-    const pa = a.split('.').map(Number)
-    const pb = b.split('.').map(Number)
-    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-      const na = pa[i] || 0
-      const nb = pb[i] || 0
-      if (na > nb) return 1
-      if (na < nb) return -1
-    }
-    return 0
-  }
+  let abortController: AbortController | null = null
 
   async function getCurrentVersion(): Promise<string> {
     try {
       const { getVersion } = await import('@tauri-apps/api/app')
       return await getVersion()
     } catch {
-      // 浏览器开发：返回占位版本
       return '0.0.0'
     }
   }
@@ -74,8 +91,7 @@ export function useUpdateChecker() {
 
       const release = await res.json()
       const latest = parseVersion(release.tag_name || 'v0.0.0')
-      const currentParsed = parseVersion(current)
-      const hasUpdate = compareVersion(latest, currentParsed) > 0
+      const hasUpdate = compareVersion(latest, parseVersion(current)) > 0
 
       const info: UpdateInfo = {
         currentVersion: current,
@@ -94,14 +110,93 @@ export function useUpdateChecker() {
       return info
     } catch (e) {
       const msg = e instanceof Error ? e.message : '未知错误'
-      status.value = {
-        checking: false,
-        error: `检查更新失败：${msg}`,
-        info: null,
-      }
+      status.value = { checking: false, error: `检查更新失败：${msg}`, info: null }
       return null
     }
   }
 
-  return { status, check, compareVersion, parseVersion, GITHUB_RELEASES }
+  /** 应用内下载安装包，带进度条 */
+  async function downloadUpdate(assetUrl: string, fileName: string): Promise<string | null> {
+    download.value = { downloading: true, progress: 0, fileName, savedPath: '', error: '' }
+    abortController = new AbortController()
+
+    try {
+      const res = await fetch(assetUrl, { signal: abortController.signal })
+      if (!res.ok) throw new Error(`下载失败 HTTP ${res.status}`)
+
+      const contentLength = Number(res.headers.get('content-length') || 0)
+      const reader = res.body?.getReader()
+      if (!reader) throw new Error('无法读取响应流')
+
+      const chunks: Uint8Array[] = []
+      let received = 0
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        chunks.push(value)
+        received += value.length
+        if (contentLength > 0) {
+          download.value.progress = Math.round((received / contentLength) * 100)
+        }
+      }
+
+      // 合并二进制数据
+      const totalLen = chunks.reduce((s, c) => s + c.length, 0)
+      const merged = new Uint8Array(totalLen)
+      let offset = 0
+      for (const c of chunks) {
+        merged.set(c, offset)
+        offset += c.length
+      }
+
+      // Tauri 环境：写入文件
+      try {
+        const { writeFile } = await import('@tauri-apps/plugin-fs')
+        const { join, downloadDir } = await import('@tauri-apps/api/path')
+        const dir = await downloadDir()
+        const path = await join(dir, fileName)
+        await writeFile(path, merged)
+        download.value = {
+          downloading: false,
+          progress: 100,
+          fileName,
+          savedPath: path,
+          error: '',
+        }
+        return path
+      } catch {
+        // 浏览器降级：触发下载
+        const blob = new Blob([merged], { type: 'application/octet-stream' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = fileName
+        a.click()
+        URL.revokeObjectURL(url)
+        download.value = {
+          downloading: false,
+          progress: 100,
+          fileName,
+          savedPath: '(浏览器下载)',
+          error: '',
+        }
+        return null
+      }
+    } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') {
+        download.value = { downloading: false, progress: 0, fileName: '', savedPath: '', error: '已取消' }
+        return null
+      }
+      const msg = e instanceof Error ? e.message : '未知错误'
+      download.value = { downloading: false, progress: 0, fileName: '', savedPath: '', error: msg }
+      return null
+    }
+  }
+
+  function cancelDownload() {
+    abortController?.abort()
+  }
+
+  return { status, download, check, downloadUpdate, cancelDownload, parseVersion, compareVersion, GITHUB_RELEASES }
 }
