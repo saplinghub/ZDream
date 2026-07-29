@@ -36,7 +36,25 @@ onMounted(() => {
   currentAccountId.value = onlineList.value[0]?.id || store.accounts[0]?.id || ''
 })
 
-function toggleCollapse() { collapsed.value = !collapsed.value }
+async function toggleCollapse() {
+  collapsed.value = !collapsed.value
+  try {
+    const { LogicalSize } = await import('@tauri-apps/api/dpi')
+    const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow')
+    const win = getCurrentWebviewWindow()
+    if (collapsed.value) {
+      await win.setSize(new LogicalSize(64, 64))
+    } else {
+      await win.setSize(new LogicalSize(340, 440))
+      setTimeout(() => {
+        const el = document.querySelector<HTMLInputElement>('.qw-item-input')
+        el?.focus()
+      }, 200)
+    }
+  } catch (e) {
+    console.error('setSize failed:', e)
+  }
+}
 
 function showFeedback(msg: string) {
   feedback.value = msg
@@ -71,16 +89,17 @@ function onEditRecord(id: string) { store.openEditRecord(id) }
 </script>
 
 <template>
-  <!-- ─── 收起态 ─── -->
-  <div v-if="collapsed" class="dock-shell" data-tauri-drag-region @click="toggleCollapse">
-    <div class="dock-card">
-      <span class="dock-emoji">💰</span>
-      <span class="dock-label">梦金囊</span>
-      <span v-if="store.quickRecordCount > 0" class="dock-count">
-        已记 {{ store.quickRecordCount }} 笔
-      </span>
-      <span class="dock-hint">点击展开</span>
-    </div>
+  <!-- ─── 收起态：64×64 可拖小球 ─── -->
+  <div
+    v-if="collapsed"
+    class="dock-ball"
+    data-tauri-drag-region
+    @click="toggleCollapse"
+  >
+    💰
+    <span v-if="store.quickRecordCount > 0" class="badge">
+      {{ Math.min(store.quickRecordCount, 99) }}
+    </span>
   </div>
 
   <!-- ─── 展开态 ─── -->
@@ -114,7 +133,6 @@ function onEditRecord(id: string) { store.openEditRecord(id) }
           <option v-for="it in store.items" :key="it.name" :value="it.name" />
         </datalist>
       </div>
-
       <div class="qw-meta-row">
         <div class="qw-qty">
           <button type="button" class="qw-step" @click="qty = Math.max(1, qty - 1)">−</button>
@@ -126,18 +144,14 @@ function onEditRecord(id: string) { store.openEditRecord(id) }
           <input v-model.number="price" class="qw-price-input" type="number" placeholder="单价(选填)" />
         </div>
       </div>
-
       <div v-if="totalPreview" class="qw-total">{{ totalPreview }}</div>
-
       <div class="qw-toggle">
         <button type="button" class="qw-io in" :class="{ active: io === 'in' }" @click="io = 'in'">+ 收入</button>
         <button type="button" class="qw-io out" :class="{ active: io === 'out' }" @click="io = 'out'">− 消耗</button>
       </div>
-
       <button class="qw-submit" type="button" @click="submit">记 录</button>
       <div v-if="feedback" class="qw-feedback">{{ feedback }}</div>
     </div>
-
     <div class="qw-recent">
       <div v-if="!recent.length" class="meta" style="padding:8px;text-align:center">暂无记录</div>
       <button v-for="r in recent" :key="r.id" type="button" class="qw-entry" @click="onEditRecord(r.id)">
@@ -150,43 +164,45 @@ function onEditRecord(id: string) { store.openEditRecord(id) }
 </template>
 
 <style scoped>
-/* ─── 收起态 ─── */
-.dock-shell {
+/* ─── 收起态小球 64×64 ─── */
+.dock-ball {
   width: 100vw;
   height: 100vh;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 35%, #ffe066, #f0b90b 45%, #d49400 90%);
+  box-shadow:
+    0 0 0 4px rgba(240,185,11,0.35),
+    0 4px 20px rgba(0,0,0,0.45),
+    inset 0 -2px 4px rgba(0,0,0,0.25),
+    inset 0 2px 4px rgba(255,255,255,0.3);
   display: grid;
   place-items: center;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
   cursor: pointer;
-  user-select: none;
+  font-size: 26px;
+  position: relative;
 }
-.dock-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding: 20px 32px;
-  border-radius: 20px;
-  background: linear-gradient(135deg, #f0b90b, #e8a300);
-  box-shadow: 0 8px 32px rgba(240,185,11,0.5);
-  transition: transform 0.15s;
+.dock-ball:hover { filter: brightness(1.1); }
+.badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: #e74c3c;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  line-height: 1;
 }
-.dock-card:hover { transform: scale(1.05); }
-.dock-card:active { transform: scale(0.95); }
-.dock-emoji { font-size: 36px; line-height: 1; }
-.dock-label { font-size: 14px; font-weight: 700; color: #5c3d00; }
-.dock-count {
-  font-size: 11px; color: #7a5200; background: rgba(255,255,255,0.5);
-  padding: 2px 10px; border-radius: 10px;
-}
-.dock-hint { font-size: 10px; color: #8b6914; }
 
 /* ─── 展开态 ─── */
 .quick-win {
   display: flex; flex-direction: column; height: 100vh;
   background: var(--surface); color: var(--fg);
-  border: 1px solid var(--border); overflow: hidden;
-  font-size: 13px;
+  border: 1px solid var(--border); overflow: hidden; font-size: 13px;
 }
 .qw-head {
   display: flex; align-items: center; justify-content: space-between;
@@ -194,7 +210,7 @@ function onEditRecord(id: string) { store.openEditRecord(id) }
   background: color-mix(in oklch, var(--accent) 6%, var(--surface));
   cursor: grab; flex-shrink: 0;
 }
-.qw-title { font-weight: 700; font-size: 14px; letter-spacing: 0.04em; }
+.qw-title { font-weight: 700; font-size: 14px; }
 .qw-online {
   display: flex; gap: 6px; padding: 8px 12px; flex-wrap: wrap;
   border-bottom: 1px solid var(--border); flex-shrink: 0;
@@ -202,24 +218,20 @@ function onEditRecord(id: string) { store.openEditRecord(id) }
 .qw-acct {
   display: flex; align-items: center; gap: 4px;
   padding: 3px 10px; border: 1px solid var(--border); border-radius: 20px;
-  background: var(--surface); color: var(--fg); font-size: 12px;
-  cursor: pointer; transition: all 0.15s;
+  background: var(--surface); color: var(--fg); font-size: 12px; cursor: pointer;
 }
 .qw-acct.active {
   border-color: var(--accent);
   background: color-mix(in oklch, var(--accent) 10%, var(--surface)); font-weight: 600;
 }
-.qw-acct:hover { border-color: var(--accent); }
 .qw-body {
-  flex: 1; padding: 16px 12px; display: flex; flex-direction: column;
-  gap: 12px; overflow: auto;
+  flex: 1; padding: 16px 12px; display: flex; flex-direction: column; gap: 12px; overflow: auto;
 }
 .qw-hero { text-align: center; }
 .qw-item-input {
   width: 100%; padding: 12px 16px; border: 2px solid var(--border);
   border-radius: 12px; background: var(--surface); color: var(--fg);
   font-size: 18px; font-weight: 600; text-align: center; outline: none;
-  transition: border-color 0.2s;
 }
 .qw-item-input:focus { border-color: var(--accent); }
 .qw-item-input::placeholder { font-weight: 400; color: var(--muted); font-size: 14px; }
@@ -229,22 +241,13 @@ function onEditRecord(id: string) { store.openEditRecord(id) }
   width: 32px; height: 32px; border: none; background: transparent;
   color: var(--fg); font-size: 16px; cursor: pointer; display: grid; place-items: center;
 }
-.qw-step:hover { background: color-mix(in oklch, var(--fg) 6%, transparent); }
 .qw-qty-val { min-width: 32px; text-align: center; font-weight: 700; font-size: 15px; }
 .qw-price {
   display: flex; align-items: center; gap: 4px;
-  border: 1px solid var(--border); border-radius: 10px; padding: 0 10px;
-  flex: 1; max-width: 180px;
+  border: 1px solid var(--border); border-radius: 10px; padding: 0 10px; flex: 1; max-width: 180px;
 }
-.qw-at { color: var(--muted); font-size: 13px; }
-.qw-price-input {
-  border: none; background: transparent; color: var(--fg);
-  font-size: 14px; width: 100%; padding: 7px 0; outline: none;
-}
-.qw-total {
-  text-align: center; font-family: var(--font-mono);
-  font-size: 16px; font-weight: 700; color: var(--accent); min-height: 20px;
-}
+.qw-price-input { border: none; background: transparent; color: var(--fg); font-size: 14px; width: 100%; padding: 7px 0; outline: none; }
+.qw-total { text-align: center; font-family: var(--font-mono); font-size: 16px; font-weight: 700; color: var(--accent); }
 .qw-toggle { display: flex; gap: 8px; }
 .qw-io {
   flex: 1; padding: 10px; border: 2px solid var(--border); border-radius: 10px;
@@ -261,16 +264,15 @@ function onEditRecord(id: string) { store.openEditRecord(id) }
 }
 .qw-submit {
   padding: 12px; border: none; border-radius: 10px; background: var(--accent);
-  color: #fff; font-size: 16px; font-weight: 700; cursor: pointer; transition: opacity 0.15s;
+  color: #fff; font-size: 16px; font-weight: 700; cursor: pointer;
 }
-.qw-submit:hover { opacity: 0.9; }
 .qw-feedback {
   text-align: center; color: var(--accent); font-weight: 600;
-  font-size: 13px; min-height: 20px; animation: fadeIn 0.2s ease;
+  font-size: 13px; animation: fadeIn 0.2s ease;
 }
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-4px); }
-  to   { opacity: 1; transform: translateY(0); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .qw-recent { border-top: 1px solid var(--border); flex-shrink: 0; max-height: 110px; overflow-y: auto; }
 .qw-entry {
@@ -278,7 +280,7 @@ function onEditRecord(id: string) { store.openEditRecord(id) }
   padding: 6px 12px; border: none;
   border-bottom: 1px solid color-mix(in oklch, var(--border) 50%, transparent);
   background: transparent; color: var(--fg); cursor: pointer;
-  font-size: 12px; text-align: left; transition: background 0.1s;
+  font-size: 12px; text-align: left;
 }
 .qw-entry:hover { background: color-mix(in oklch, var(--fg) 3%, transparent); }
 .qw-time { color: var(--muted); font-family: var(--font-mono); min-width: 36px; }
