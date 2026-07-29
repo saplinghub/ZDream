@@ -199,7 +199,6 @@ export async function openQuickFloat(): Promise<void> {
     minHeight: 56,
     resizable: true,
     decorations: false,
-    transparent: true,
     alwaysOnTop: true,
     skipTaskbar: true,
     visible: true,

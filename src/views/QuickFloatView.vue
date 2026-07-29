@@ -17,29 +17,22 @@ let feedbackTimer: ReturnType<typeof setTimeout> | null = null
 const onlineList = computed(() => store.accounts.filter((a) => a.online))
 const currentAccountId = ref('')
 
-watch(
-  () => store.accounts,
-  () => {
-    if (!currentAccountId.value) {
-      currentAccountId.value = onlineList.value[0]?.id || store.accounts[0]?.id || ''
-    }
-  },
-  { immediate: true },
-)
+watch(() => store.accounts, () => {
+  if (!currentAccountId.value) {
+    currentAccountId.value = onlineList.value[0]?.id || store.accounts[0]?.id || ''
+  }
+}, { immediate: true })
 
 const totalPreview = computed(() => {
   const p = Number(price.value) || 0
   if (!p) return ''
-  const t = qty.value * p
-  return fmtMh(io.value === 'in' ? t : -t)
+  return fmtMh(io.value === 'in' ? Number(qty.value) * p : -(Number(qty.value) * p))
 })
 
 const recent = computed(() => store.records.slice(0, 3))
 
 onMounted(() => {
   applyDesktopChrome()
-  document.documentElement.classList.add('float-window')
-  document.body.classList.add('float-window')
   currentAccountId.value = onlineList.value[0]?.id || store.accounts[0]?.id || ''
 })
 
@@ -73,159 +66,127 @@ function submit() {
 function onItemKeydown(e: KeyboardEvent) {
   if (e.key === 'Enter') { e.preventDefault(); submit() }
 }
-
 function selectAccount(id: string) { currentAccountId.value = id }
 function onEditRecord(id: string) { store.openEditRecord(id) }
 </script>
 
 <template>
-  <div class="quick-root" :class="{ docked: collapsed }">
-    <!-- ─── 收起态 ─── -->
-    <div
-      v-if="collapsed"
-      class="dock-ball"
-      data-tauri-drag-region
-      @dblclick="toggleCollapse"
-    >
-      <div class="dock-inner">
-        <span class="dock-icon">💰</span>
-        <span v-if="store.quickRecordCount > 0" class="dock-badge">
-          {{ Math.min(store.quickRecordCount, 99) }}
-        </span>
-      </div>
+  <!-- ─── 收起态 ─── -->
+  <div v-if="collapsed" class="dock-shell" data-tauri-drag-region @click="toggleCollapse">
+    <div class="dock-card">
+      <span class="dock-emoji">💰</span>
+      <span class="dock-label">梦金囊</span>
+      <span v-if="store.quickRecordCount > 0" class="dock-count">
+        已记 {{ store.quickRecordCount }} 笔
+      </span>
+      <span class="dock-hint">点击展开</span>
+    </div>
+  </div>
+
+  <!-- ─── 展开态 ─── -->
+  <div v-else class="quick-win">
+    <div class="qw-head" data-tauri-drag-region>
+      <span class="qw-title">梦金囊</span>
+      <button class="btn btn-ghost btn-sm" type="button" title="收成小球" @click="toggleCollapse">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="4 14 12 20 20 14" />
+        </svg>
+      </button>
     </div>
 
-    <!-- ─── 展开态 ─── -->
-    <template v-else>
-      <div class="qw-head" data-tauri-drag-region>
-        <span class="qw-title">梦金囊</span>
-        <button class="btn btn-ghost btn-sm" type="button" title="收成小球" @click="toggleCollapse">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="4 14 12 20 20 14" />
-          </svg>
+    <div class="qw-online">
+      <template v-if="onlineList.length">
+        <button v-for="a in store.accounts" :key="a.id" type="button"
+          class="qw-acct" :class="{ active: a.id === currentAccountId, on: a.online }"
+          @click="selectAccount(a.id)">
+          <span class="led" :class="{ on: a.online }" />{{ a.name }}
         </button>
+      </template>
+      <span v-else class="meta" style="padding:4px 0">未上线</span>
+    </div>
+
+    <div class="qw-body">
+      <div class="qw-hero">
+        <input v-model="itemInput" class="qw-item-input"
+          type="text" placeholder="输入物品名称..." list="quickItemDict"
+          autofocus @keydown="onItemKeydown" />
+        <datalist id="quickItemDict">
+          <option v-for="it in store.items" :key="it.name" :value="it.name" />
+        </datalist>
       </div>
 
-      <div class="qw-online">
-        <template v-if="onlineList.length">
-          <button v-for="a in store.accounts" :key="a.id" type="button"
-            class="qw-acct" :class="{ active: a.id === currentAccountId, on: a.online }"
-            @click="selectAccount(a.id)">
-            <span class="led" :class="{ on: a.online }" />{{ a.name }}
-          </button>
-        </template>
-        <span v-else class="meta" style="padding:4px 0">未上线</span>
-      </div>
-
-      <div class="qw-body">
-        <div class="qw-hero">
-          <input v-model="itemInput" class="qw-item-input"
-            type="text" placeholder="输入物品名称..." list="quickItemDict"
-            autofocus @keydown="onItemKeydown" />
-          <datalist id="quickItemDict">
-            <option v-for="it in store.items" :key="it.name" :value="it.name" />
-          </datalist>
+      <div class="qw-meta-row">
+        <div class="qw-qty">
+          <button type="button" class="qw-step" @click="qty = Math.max(1, qty - 1)">−</button>
+          <span class="qw-qty-val">{{ qty }}</span>
+          <button type="button" class="qw-step" @click="qty = qty + 1">+</button>
         </div>
-
-        <div class="qw-meta-row">
-          <div class="qw-qty">
-            <button type="button" class="qw-step" @click="qty = Math.max(1, qty - 1)">−</button>
-            <span class="qw-qty-val">{{ qty }}</span>
-            <button type="button" class="qw-step" @click="qty = qty + 1">+</button>
-          </div>
-          <div class="qw-price">
-            <span class="qw-at">@</span>
-            <input v-model.number="price" class="qw-price-input" type="number" placeholder="单价(选填)" />
-          </div>
+        <div class="qw-price">
+          <span class="qw-at">@</span>
+          <input v-model.number="price" class="qw-price-input" type="number" placeholder="单价(选填)" />
         </div>
-
-        <div v-if="totalPreview" class="qw-total">{{ totalPreview }}</div>
-
-        <div class="qw-toggle">
-          <button type="button" class="qw-io in" :class="{ active: io === 'in' }" @click="io = 'in'">+ 收入</button>
-          <button type="button" class="qw-io out" :class="{ active: io === 'out' }" @click="io = 'out'">− 消耗</button>
-        </div>
-
-        <button class="qw-submit" type="button" @click="submit">记 录</button>
-        <div v-if="feedback" class="qw-feedback">{{ feedback }}</div>
       </div>
 
-      <div class="qw-recent">
-        <div v-if="!recent.length" class="meta" style="padding:8px;text-align:center">暂无记录</div>
-        <button v-for="r in recent" :key="r.id" type="button" class="qw-entry" @click="onEditRecord(r.id)">
-          <span class="qw-time">{{ fmtTimeShort(r.time) }}</span>
-          <span class="qw-amt" :class="r.pos ? 'pos' : 'neg'">{{ r.amt }}</span>
-          <span class="qw-tag">{{ r.tag }}</span>
-        </button>
+      <div v-if="totalPreview" class="qw-total">{{ totalPreview }}</div>
+
+      <div class="qw-toggle">
+        <button type="button" class="qw-io in" :class="{ active: io === 'in' }" @click="io = 'in'">+ 收入</button>
+        <button type="button" class="qw-io out" :class="{ active: io === 'out' }" @click="io = 'out'">− 消耗</button>
       </div>
-    </template>
+
+      <button class="qw-submit" type="button" @click="submit">记 录</button>
+      <div v-if="feedback" class="qw-feedback">{{ feedback }}</div>
+    </div>
+
+    <div class="qw-recent">
+      <div v-if="!recent.length" class="meta" style="padding:8px;text-align:center">暂无记录</div>
+      <button v-for="r in recent" :key="r.id" type="button" class="qw-entry" @click="onEditRecord(r.id)">
+        <span class="qw-time">{{ fmtTimeShort(r.time) }}</span>
+        <span class="qw-amt" :class="r.pos ? 'pos' : 'neg'">{{ r.amt }}</span>
+        <span class="qw-tag">{{ r.tag }}</span>
+      </button>
+    </div>
   </div>
 </template>
 
 <style scoped>
-/* ─── 根容器 ─── */
-.quick-root {
+/* ─── 收起态 ─── */
+.dock-shell {
   width: 100vw;
   height: 100vh;
-  overflow: hidden;
-  font-size: 13px;
-}
-.quick-root.docked {
   display: grid;
   place-items: center;
-}
-
-/* ─── 收起态小球 ─── */
-.dock-ball {
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
   cursor: pointer;
-  display: grid;
-  place-items: center;
-  background: radial-gradient(circle at 38% 35%, #ffe066 0%, #f0b90b 40%, #d49400 85%, #b07400 100%);
-  box-shadow:
-    0 0 0 4px rgba(240, 185, 11, 0.3),
-    0 6px 24px rgba(0, 0, 0, 0.4),
-    inset 0 -3px 6px rgba(0, 0, 0, 0.25),
-    inset 0 3px 6px rgba(255, 255, 255, 0.35);
+  user-select: none;
+}
+.dock-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 20px 32px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #f0b90b, #e8a300);
+  box-shadow: 0 8px 32px rgba(240,185,11,0.5);
   transition: transform 0.15s;
 }
-.dock-ball:hover { transform: scale(1.08); }
-.dock-ball:active { transform: scale(0.94); }
-
-.dock-inner {
-  position: relative;
-  display: grid;
-  place-items: center;
+.dock-card:hover { transform: scale(1.05); }
+.dock-card:active { transform: scale(0.95); }
+.dock-emoji { font-size: 36px; line-height: 1; }
+.dock-label { font-size: 14px; font-weight: 700; color: #5c3d00; }
+.dock-count {
+  font-size: 11px; color: #7a5200; background: rgba(255,255,255,0.5);
+  padding: 2px 10px; border-radius: 10px;
 }
-.dock-icon {
-  font-size: 28px;
-  line-height: 1;
-  filter: drop-shadow(0 2px 2px rgba(0,0,0,0.35));
-}
-.dock-badge {
-  position: absolute;
-  top: -14px;
-  right: -14px;
-  min-width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #e74c3c;
-  color: #fff;
-  font-size: 10px;
-  font-weight: 700;
-  display: grid;
-  place-items: center;
-  padding: 0 3px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
-}
+.dock-hint { font-size: 10px; color: #8b6914; }
 
 /* ─── 展开态 ─── */
 .quick-win {
   display: flex; flex-direction: column; height: 100vh;
   background: var(--surface); color: var(--fg);
   border: 1px solid var(--border); overflow: hidden;
+  font-size: 13px;
 }
 .qw-head {
   display: flex; align-items: center; justify-content: space-between;
