@@ -2,12 +2,11 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { fmtMh, fmtTimeShort } from '@/utils/format'
-import { applyDesktopChrome, isTauri } from '@/platform/desktop'
+import { applyDesktopChrome } from '@/platform/desktop'
 
 const store = useAppStore()
 const collapsed = ref(false)
 
-// ── 展开态状态 ──
 const itemInput = ref('')
 const qty = ref(1)
 const price = ref<number | ''>('')
@@ -44,27 +43,7 @@ onMounted(() => {
   currentAccountId.value = onlineList.value[0]?.id || store.accounts[0]?.id || ''
 })
 
-async function setWinSize(w: number, h: number) {
-  if (!isTauri()) return
-  try {
-    const { LogicalSize } = await import('@tauri-apps/api/dpi')
-    const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow')
-    await getCurrentWebviewWindow().setSize(new LogicalSize(w, h))
-  } catch { /* ignore */ }
-}
-
-async function toggleCollapse() {
-  collapsed.value = !collapsed.value
-  if (collapsed.value) {
-    await setWinSize(60, 60)
-  } else {
-    await setWinSize(340, 440)
-    setTimeout(() => {
-      const el = document.querySelector<HTMLInputElement>('.qw-item-input')
-      el?.focus()
-    }, 150)
-  }
-}
+function toggleCollapse() { collapsed.value = !collapsed.value }
 
 function showFeedback(msg: string) {
   feedback.value = msg
@@ -100,125 +79,137 @@ function onEditRecord(id: string) { store.openEditRecord(id) }
 </script>
 
 <template>
-  <!-- ─── 收起态：360 小球 ─── -->
-  <div
-    v-if="collapsed"
-    class="dock-ball"
-    data-tauri-drag-region
-    @click="toggleCollapse"
-  >
-    <span class="dock-ball-icon">💰</span>
-    <span v-if="store.quickRecordCount > 0" class="dock-ball-badge">
-      {{ Math.min(store.quickRecordCount, 99) }}
-    </span>
-  </div>
-
-  <!-- ─── 展开态：完整浮窗 ─── -->
-  <div v-else class="quick-win">
-    <div class="qw-head" data-tauri-drag-region>
-      <span class="qw-title">梦金囊</span>
-      <button class="btn btn-ghost btn-sm" type="button" title="收成小图标" @click="toggleCollapse">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="4 14 12 20 20 14" />
-        </svg>
-      </button>
+  <div class="quick-root" :class="{ docked: collapsed }">
+    <!-- ─── 收起态 ─── -->
+    <div
+      v-if="collapsed"
+      class="dock-ball"
+      data-tauri-drag-region
+      @dblclick="toggleCollapse"
+    >
+      <div class="dock-inner">
+        <span class="dock-icon">💰</span>
+        <span v-if="store.quickRecordCount > 0" class="dock-badge">
+          {{ Math.min(store.quickRecordCount, 99) }}
+        </span>
+      </div>
     </div>
 
-    <div class="qw-online">
-      <template v-if="onlineList.length">
-        <button
-          v-for="a in store.accounts" :key="a.id" type="button"
-          class="qw-acct" :class="{ active: a.id === currentAccountId, on: a.online }"
-          @click="selectAccount(a.id)"
-        >
-          <span class="led" :class="{ on: a.online }" />{{ a.name }}
+    <!-- ─── 展开态 ─── -->
+    <template v-else>
+      <div class="qw-head" data-tauri-drag-region>
+        <span class="qw-title">梦金囊</span>
+        <button class="btn btn-ghost btn-sm" type="button" title="收成小球" @click="toggleCollapse">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="4 14 12 20 20 14" />
+          </svg>
         </button>
-      </template>
-      <span v-else class="meta" style="padding:4px 0">未上线</span>
-    </div>
-
-    <div class="qw-body">
-      <div class="qw-hero">
-        <input
-          v-model="itemInput" class="qw-item-input"
-          type="text" placeholder="输入物品名称..." list="quickItemDict"
-          autofocus @keydown="onItemKeydown"
-        />
-        <datalist id="quickItemDict">
-          <option v-for="it in store.items" :key="it.name" :value="it.name" />
-        </datalist>
       </div>
 
-      <div class="qw-meta-row">
-        <div class="qw-qty">
-          <button type="button" class="qw-step" @click="qty = Math.max(1, qty - 1)">−</button>
-          <span class="qw-qty-val">{{ qty }}</span>
-          <button type="button" class="qw-step" @click="qty = qty + 1">+</button>
+      <div class="qw-online">
+        <template v-if="onlineList.length">
+          <button v-for="a in store.accounts" :key="a.id" type="button"
+            class="qw-acct" :class="{ active: a.id === currentAccountId, on: a.online }"
+            @click="selectAccount(a.id)">
+            <span class="led" :class="{ on: a.online }" />{{ a.name }}
+          </button>
+        </template>
+        <span v-else class="meta" style="padding:4px 0">未上线</span>
+      </div>
+
+      <div class="qw-body">
+        <div class="qw-hero">
+          <input v-model="itemInput" class="qw-item-input"
+            type="text" placeholder="输入物品名称..." list="quickItemDict"
+            autofocus @keydown="onItemKeydown" />
+          <datalist id="quickItemDict">
+            <option v-for="it in store.items" :key="it.name" :value="it.name" />
+          </datalist>
         </div>
-        <div class="qw-price">
-          <span class="qw-at">@</span>
-          <input v-model.number="price" class="qw-price-input" type="number" placeholder="单价(选填)" />
+
+        <div class="qw-meta-row">
+          <div class="qw-qty">
+            <button type="button" class="qw-step" @click="qty = Math.max(1, qty - 1)">−</button>
+            <span class="qw-qty-val">{{ qty }}</span>
+            <button type="button" class="qw-step" @click="qty = qty + 1">+</button>
+          </div>
+          <div class="qw-price">
+            <span class="qw-at">@</span>
+            <input v-model.number="price" class="qw-price-input" type="number" placeholder="单价(选填)" />
+          </div>
         </div>
+
+        <div v-if="totalPreview" class="qw-total">{{ totalPreview }}</div>
+
+        <div class="qw-toggle">
+          <button type="button" class="qw-io in" :class="{ active: io === 'in' }" @click="io = 'in'">+ 收入</button>
+          <button type="button" class="qw-io out" :class="{ active: io === 'out' }" @click="io = 'out'">− 消耗</button>
+        </div>
+
+        <button class="qw-submit" type="button" @click="submit">记 录</button>
+        <div v-if="feedback" class="qw-feedback">{{ feedback }}</div>
       </div>
 
-      <div v-if="totalPreview" class="qw-total">{{ totalPreview }}</div>
-
-      <div class="qw-toggle">
-        <button type="button" class="qw-io in" :class="{ active: io === 'in' }" @click="io = 'in'">+ 收入</button>
-        <button type="button" class="qw-io out" :class="{ active: io === 'out' }" @click="io = 'out'">− 消耗</button>
+      <div class="qw-recent">
+        <div v-if="!recent.length" class="meta" style="padding:8px;text-align:center">暂无记录</div>
+        <button v-for="r in recent" :key="r.id" type="button" class="qw-entry" @click="onEditRecord(r.id)">
+          <span class="qw-time">{{ fmtTimeShort(r.time) }}</span>
+          <span class="qw-amt" :class="r.pos ? 'pos' : 'neg'">{{ r.amt }}</span>
+          <span class="qw-tag">{{ r.tag }}</span>
+        </button>
       </div>
-
-      <button class="qw-submit" type="button" @click="submit">记 录</button>
-      <div v-if="feedback" class="qw-feedback">{{ feedback }}</div>
-    </div>
-
-    <div class="qw-recent">
-      <div v-if="!recent.length" class="meta" style="padding:8px;text-align:center">暂无记录</div>
-      <button v-for="r in recent" :key="r.id" type="button" class="qw-entry" @click="onEditRecord(r.id)">
-        <span class="qw-time">{{ fmtTimeShort(r.time) }}</span>
-        <span class="qw-amt" :class="r.pos ? 'pos' : 'neg'">{{ r.amt }}</span>
-        <span class="qw-tag">{{ r.tag }}</span>
-      </button>
-    </div>
+    </template>
   </div>
 </template>
 
 <style scoped>
-/* ─── 收起态小球 ─── */
-.dock-ball {
+/* ─── 根容器 ─── */
+.quick-root {
   width: 100vw;
   height: 100vh;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #ffd700, #e8a300 60%, #c78200 100%);
-  box-shadow:
-    0 0 0 3px rgba(255, 215, 0, 0.35),
-    0 4px 16px rgba(0, 0, 0, 0.35),
-    inset 0 -2px 4px rgba(0, 0, 0, 0.2),
-    inset 0 2px 4px rgba(255, 255, 255, 0.3);
+  overflow: hidden;
+  font-size: 13px;
+}
+.quick-root.docked {
   display: grid;
   place-items: center;
+}
+
+/* ─── 收起态小球 ─── */
+.dock-ball {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
   cursor: pointer;
-  position: relative;
-  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at 38% 35%, #ffe066 0%, #f0b90b 40%, #d49400 85%, #b07400 100%);
+  box-shadow:
+    0 0 0 4px rgba(240, 185, 11, 0.3),
+    0 6px 24px rgba(0, 0, 0, 0.4),
+    inset 0 -3px 6px rgba(0, 0, 0, 0.25),
+    inset 0 3px 6px rgba(255, 255, 255, 0.35);
   transition: transform 0.15s;
 }
-.dock-ball:hover {
-  transform: scale(1.06);
+.dock-ball:hover { transform: scale(1.08); }
+.dock-ball:active { transform: scale(0.94); }
+
+.dock-inner {
+  position: relative;
+  display: grid;
+  place-items: center;
 }
-.dock-ball:active {
-  transform: scale(0.95);
-}
-.dock-ball-icon {
-  font-size: 22px;
+.dock-icon {
+  font-size: 28px;
   line-height: 1;
-  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4));
+  filter: drop-shadow(0 2px 2px rgba(0,0,0,0.35));
 }
-.dock-ball-badge {
+.dock-badge {
   position: absolute;
-  top: 2px;
-  right: 2px;
-  min-width: 16px;
-  height: 16px;
+  top: -14px;
+  right: -14px;
+  min-width: 18px;
+  height: 18px;
   border-radius: 50%;
   background: #e74c3c;
   color: #fff;
@@ -232,24 +223,15 @@ function onEditRecord(id: string) { store.openEditRecord(id) }
 
 /* ─── 展开态 ─── */
 .quick-win {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  background: var(--surface);
-  color: var(--fg);
-  border: 1px solid var(--border);
-  overflow: hidden;
-  font-size: 13px;
+  display: flex; flex-direction: column; height: 100vh;
+  background: var(--surface); color: var(--fg);
+  border: 1px solid var(--border); overflow: hidden;
 }
 .qw-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px; border-bottom: 1px solid var(--border);
   background: color-mix(in oklch, var(--accent) 6%, var(--surface));
-  cursor: grab;
-  flex-shrink: 0;
+  cursor: grab; flex-shrink: 0;
 }
 .qw-title { font-weight: 700; font-size: 14px; letter-spacing: 0.04em; }
 .qw-online {
@@ -264,8 +246,7 @@ function onEditRecord(id: string) { store.openEditRecord(id) }
 }
 .qw-acct.active {
   border-color: var(--accent);
-  background: color-mix(in oklch, var(--accent) 10%, var(--surface));
-  font-weight: 600;
+  background: color-mix(in oklch, var(--accent) 10%, var(--surface)); font-weight: 600;
 }
 .qw-acct:hover { border-color: var(--accent); }
 .qw-body {
@@ -311,13 +292,11 @@ function onEditRecord(id: string) { store.openEditRecord(id) }
 }
 .qw-io.in.active {
   border-color: var(--accent);
-  background: color-mix(in oklch, var(--accent) 15%, var(--surface));
-  color: var(--accent);
+  background: color-mix(in oklch, var(--accent) 15%, var(--surface)); color: var(--accent);
 }
 .qw-io.out.active {
   border-color: var(--danger);
-  background: color-mix(in oklch, var(--danger) 12%, var(--surface));
-  color: var(--danger);
+  background: color-mix(in oklch, var(--danger) 12%, var(--surface)); color: var(--danger);
 }
 .qw-submit {
   padding: 12px; border: none; border-radius: 10px; background: var(--accent);
