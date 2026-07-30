@@ -29,7 +29,7 @@ function onBallMove(e: MouseEvent) {
   }
 }
 
-function onBallUp(e: MouseEvent) {
+function onBallUp(_e: MouseEvent) {
   document.removeEventListener('mousemove', onBallMove)
   document.removeEventListener('mouseup', onBallUp)
   if (!dragging) {
