@@ -198,8 +198,15 @@ function onKey(e: KeyboardEvent) { if (e.key === 'Enter') { e.preventDefault(); 
 </template>
 
 <style>
-/* 全局：透明窗口无边框 */
-html, body, #app { margin: 0; padding: 0; background: transparent !important; overflow: hidden; }
+/* 全局：透明窗口无边框（覆盖 tokens.css 的 body.tauri-host #app） */
+html, body, #app,
+body.tauri-host #app,
+body.desktop-host #app,
+html.tauri-host, body.tauri-host {
+  margin: 0 !important; padding: 0 !important;
+  background: transparent !important;
+  overflow: hidden !important;
+}
 </style>
 <style scoped>
 /* 小球容器：全窗口居中 */
