@@ -9,20 +9,25 @@ const collapsed = ref(false)
 
 // ── 点击 vs 拖动 ──
 let dragStart = { x: 0, y: 0 }
-let dragging = false
-const DRAG_THRESHOLD = 4 // 像素
+const isDragging = ref(false)
+const pressing = ref(false)
+const DRAG_THRESHOLD = 5
 
 function onBallDown(e: MouseEvent) {
+  if (e.button !== 0) return
   dragStart = { x: e.screenX, y: e.screenY }
-  dragging = false
+  isDragging.value = false
+  pressing.value = true
   document.addEventListener('mousemove', onBallMove)
   document.addEventListener('mouseup', onBallUp)
 }
 
 function onBallMove(e: MouseEvent) {
-  if (!dragging && (Math.abs(e.screenX - dragStart.x) > DRAG_THRESHOLD || Math.abs(e.screenY - dragStart.y) > DRAG_THRESHOLD)) {
-    dragging = true
-    // Tauri 原生拖动
+  const dx = e.screenX - dragStart.x
+  const dy = e.screenY - dragStart.y
+  if (!isDragging.value && Math.sqrt(dx * dx + dy * dy) >= DRAG_THRESHOLD) {
+    isDragging.value = true
+    pressing.value = false
     import('@tauri-apps/api/webviewWindow').then(({ getCurrentWebviewWindow }) => {
       getCurrentWebviewWindow().startDragging()
     })
@@ -32,10 +37,11 @@ function onBallMove(e: MouseEvent) {
 function onBallUp(_e: MouseEvent) {
   document.removeEventListener('mousemove', onBallMove)
   document.removeEventListener('mouseup', onBallUp)
-  if (!dragging) {
-    // 纯点击 → 展开
+  pressing.value = false
+  if (!isDragging.value) {
     toggleCollapse()
   }
+  isDragging.value = false
 }
 
 const itemInput = ref('')
@@ -123,13 +129,13 @@ function onKey(e: KeyboardEvent) { if (e.key === 'Enter') { e.preventDefault(); 
 
 <template>
   <!-- 收起态：极简小球 -->
-  <div v-if="collapsed" class="ball" @mousedown="onBallDown">
-    <svg class="ball-icon" viewBox="0 0 32 32" fill="none">
-      <circle cx="16" cy="12" r="4" fill="currentColor" opacity="0.9"/>
-      <path d="M6 26c0-5.5 4.5-10 10-10s10 4.5 10 10" stroke="currentColor" stroke-width="2.5" fill="none" opacity="0.9"/>
-      <circle cx="16" cy="16" r="15" stroke="currentColor" stroke-width="1" opacity="0.2"/>
-    </svg>
-    <span v-if="badge > 0" class="ball-badge">{{ badge }}</span>
+  <div v-if="collapsed" class="ball-wrap">
+    <div class="ball" :class="{ pressing: pressing, dragging: isDragging }" @mousedown="onBallDown">
+      <div class="ball-inner">
+        <span class="ball-letter">梦</span>
+      </div>
+      <span v-if="badge > 0" class="ball-badge">{{ badge }}</span>
+    </div>
   </div>
 
   <!-- 展开态 -->
@@ -196,23 +202,56 @@ function onKey(e: KeyboardEvent) { if (e.key === 'Enter') { e.preventDefault(); 
 html, body, #app { margin: 0; padding: 0; background: transparent !important; overflow: hidden; }
 </style>
 <style scoped>
-/* ─── 收起态小球 ─── */
-.ball {
-  width: 56px; height: 56px; border-radius: 50%;
-  background: radial-gradient(circle at 42% 38%, #ffe566, #f5b800 50%, #d4940a 100%);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.35);
-  display: grid; place-items: center; cursor: pointer;
-  position: relative; transition: transform 0.12s, box-shadow 0.12s;
-  -webkit-app-region: drag;
+/* 小球容器：全窗口居中 */
+.ball-wrap {
+  width: 100vw; height: 100vh; display: grid; place-items: center;
 }
-.ball:hover  { transform: scale(1.08); box-shadow: 0 6px 22px rgba(0,0,0,0.45); }
-.ball:active { transform: scale(0.93); }
-.ball-icon { width: 16px; height: 16px; color: #7a5500; pointer-events: none; }
+/* ─── 收起态小球（参考 floatingBall.html 设计）─── */
+.ball {
+  width: 48px; height: 48px; border-radius: 50%;
+  position: relative; cursor: pointer;
+  transition: transform 0.15s ease;
+  margin: auto;
+}
+/* 彩虹渐变边框 */
+.ball::before {
+  content: '';
+  position: absolute; inset: 0; border-radius: 50%;
+  padding: 3px;
+  background: conic-gradient(from 0deg, #f43f5e, #ec4899, #a855f7, #6366f1, #3b82f6, #06b6d4, #10b981, #eab308, #f97316, #f43f5e);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: border-spin 3s linear infinite;
+}
+/* 毛玻璃内圆 */
+.ball-inner {
+  position: absolute; inset: 3px; border-radius: 50%;
+  background: rgba(255,255,255,0.08);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex; align-items: center; justify-content: center;
+}
+/* 渐变字 */
+.ball-letter {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 22px; font-weight: 700; line-height: 1; pointer-events: none;
+  background: conic-gradient(from 0deg, #f43f5e, #ec4899, #a855f7, #6366f1, #3b82f6, #06b6d4, #10b981, #eab308, #f97316, #f43f5e);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+/* 数字角标 */
 .ball-badge {
-  position: absolute; top: 2px; right: 2px;
+  position: absolute; top: -2px; right: -2px; z-index: 2;
   min-width: 17px; height: 17px; border-radius: 50%;
   background: #ff4757; color: #fff; font-size: 10px; font-weight: 700;
   display: grid; place-items: center; pointer-events: none;
+}
+/* 状态 */
+.ball.pressing { transform: scale(0.92); }
+.ball.dragging { transform: scale(1); opacity: 0.8; transition: none; }
+@keyframes border-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }
 
 /* ─── 展开态面板 ─── */
