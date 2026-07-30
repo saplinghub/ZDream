@@ -30,7 +30,7 @@ export async function openFloat(): Promise<void> {
     minWidth: 56,
     minHeight: 56,
     decorations: false,
-    hasShadow: true,
+    shadow: true,
     alwaysOnTop: true,
     skipTaskbar: true,
     visible: true,
