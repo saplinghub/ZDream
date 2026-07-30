@@ -82,10 +82,13 @@ onMounted(() => {
 onUnmounted(() => window.removeEventListener('blur', onBlur))
 
 function onBlur() {
-  // 展开态失焦 → 自动收成小球
-  if (!collapsed.value) {
+  if (!collapsed.value && !transitioning.value) {
+    transitioning.value = true
     collapsed.value = true
-    setSize(48, 48)
+    setTimeout(async () => {
+      await setSize(48, 48)
+      transitioning.value = false
+    }, 500)
   }
 }
 
@@ -97,16 +100,28 @@ async function setSize(w: number, h: number) {
   } catch { /* ignore */ }
 }
 
+const transitioning = ref(false)
+
 async function toggleCollapse() {
-  collapsed.value = !collapsed.value
+  if (transitioning.value) return
   if (collapsed.value) {
-    setSize(48, 48)
-  } else {
-    setSize(360, 500)
+    // 展开：先放大窗口，再切换内容
+    transitioning.value = true
+    collapsed.value = false
+    await setSize(360, 500)
+    await new Promise(r => setTimeout(r, 50))
+    transitioning.value = false
     setTimeout(() => {
       const el = document.querySelector<HTMLInputElement>('.f-item-input')
       el?.focus()
-    }, 200)
+    }, 350)
+  } else {
+    // 收起：先切换内容（动画播放），再缩小窗口
+    transitioning.value = true
+    collapsed.value = true
+    await new Promise(r => setTimeout(r, 500))
+    await setSize(48, 48)
+    transitioning.value = false
   }
 }
 
@@ -141,18 +156,20 @@ function onKey(e: KeyboardEvent) { if (e.key === 'Enter') { e.preventDefault(); 
 </script>
 
 <template>
-  <!-- 收起态：纯透明悬浮球 -->
-  <div
-    v-if="collapsed"
-    class="ball"
-    :class="{ pressing: pressing, dragging: isDragging }"
-    @mousedown="onBallDown"
-  >
-    <span class="ball-letter">梦</span>
-  </div>
+  <Transition name="float" mode="out-in">
+    <!-- 收起态：纯透明悬浮球 -->
+    <div
+      v-if="collapsed"
+      key="ball"
+      class="ball"
+      :class="{ pressing: pressing, dragging: isDragging }"
+      @mousedown="onBallDown"
+    >
+      <span class="ball-letter">梦</span>
+    </div>
 
-  <!-- 展开态 -->
-  <div v-else class="panel">
+    <!-- 展开态 -->
+    <div v-else key="panel" class="panel">
     <div class="p-head" data-tauri-drag-region>
       <span class="p-title">梦金囊</span>
       <button class="p-btn" @click="toggleCollapse" title="收成小球">
@@ -208,6 +225,7 @@ function onKey(e: KeyboardEvent) { if (e.key === 'Enter') { e.preventDefault(); 
       </div>
     </div>
   </div>
+  </Transition>
 </template>
 
 <style>
@@ -218,14 +236,33 @@ html, body, #app {
   background: transparent !important;
   overflow: hidden !important;
 }
+
+/* ─── 展开/收起过渡动画 ─── */
+
+/* 悬浮球：弹入弹出 */
+.float-enter-active {
+  transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.float-leave-active {
+  transition: all 0.2s cubic-bezier(0.4, 0, 1, 1);
+}
+.float-enter-from {
+  opacity: 0;
+  transform: scale(0.3);
+}
+.float-leave-to {
+  opacity: 0;
+  transform: scale(1.2);
+}
 </style>
 <style scoped>
 /* ─── 收起态悬浮球（参考 deepseek_html 样式）─── */
 .ball {
   position: fixed;
   left: 50%; top: 50%;
-  transform: translate(-50%, -50%);
   width: 48px; height: 48px;
+  margin-left: -24px;
+  margin-top: -24px;
   border-radius: 50%;
 
   /* 无外框、无背景、无阴影 */
@@ -292,10 +329,9 @@ html, body, #app {
 
 /* 交互 */
 .ball.pressing {
-  transform: translate(-50%, -50%) scale(0.92);
+  transform: scale(0.92);
 }
 .ball.dragging {
-  transform: translate(-50%, -50%) scale(1);
   opacity: 0.8;
   transition: none;
 }
