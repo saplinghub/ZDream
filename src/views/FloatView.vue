@@ -81,14 +81,19 @@ onMounted(() => {
 })
 onUnmounted(() => window.removeEventListener('blur', onBlur))
 
-function onBlur() {
+async function onBlur() {
   if (!collapsed.value && !transitioning.value) {
+    const pos = await getWinPos()
+    const anchorX = pos.x + ANCHOR_X
+    const anchorY = pos.y + ANCHOR_Y
+    const newX = Math.max(0, anchorX - BALL_CX)
+    const newY = Math.max(0, anchorY - BALL_CY)
     transitioning.value = true
     collapsed.value = true
-    setTimeout(async () => {
-      await setSize(48, 48)
-      transitioning.value = false
-    }, 500)
+    await new Promise(r => setTimeout(r, 500))
+    await setWinPos(newX, newY)
+    await setSize(48, 48)
+    transitioning.value = false
   }
 }
 
@@ -100,15 +105,48 @@ async function setSize(w: number, h: number) {
   } catch { /* ignore */ }
 }
 
+async function getWinPos(): Promise<{ x: number; y: number }> {
+  try {
+    const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow')
+    const p = await getCurrentWebviewWindow().outerPosition()
+    return { x: p.x, y: p.y }
+  } catch {
+    return { x: 0, y: 0 }
+  }
+}
+
+async function setWinPos(x: number, y: number) {
+  try {
+    const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow')
+    await getCurrentWebviewWindow().setPosition({ x, y } as any)
+  } catch { /* ignore */ }
+}
+
+// 面板宽高
+const PANEL_W = 360
+const PANEL_H = 500
+// 锚点：展开态面板的视觉中心
+const ANCHOR_X = Math.round(PANEL_W / 2)
+const ANCHOR_Y = Math.round(PANEL_H / 2)
+// 收起态小球中心偏移（相对于 48×48 窗口）
+const BALL_CX = 24
+const BALL_CY = 24
+
 const transitioning = ref(false)
 
 async function toggleCollapse() {
   if (transitioning.value) return
+  const pos = await getWinPos()
   if (collapsed.value) {
-    // 展开：先放大窗口，再切换内容
+    // ── 展开：锚点 = 小球中心，新窗口位置 = 锚点 - 面板中心偏移 ──
+    const anchorX = pos.x + BALL_CX
+    const anchorY = pos.y + BALL_CY
+    const newX = Math.max(0, anchorX - ANCHOR_X)
+    const newY = Math.max(0, anchorY - ANCHOR_Y)
     transitioning.value = true
     collapsed.value = false
-    await setSize(360, 500)
+    await setWinPos(newX, newY)
+    await setSize(PANEL_W, PANEL_H)
     await new Promise(r => setTimeout(r, 50))
     transitioning.value = false
     setTimeout(() => {
@@ -116,10 +154,15 @@ async function toggleCollapse() {
       el?.focus()
     }, 350)
   } else {
-    // 收起：先切换内容（动画播放），再缩小窗口
+    // ── 收起：锚点 = 面板中心，新窗口位置 = 锚点 - 小球中心偏移 ──
+    const anchorX = pos.x + ANCHOR_X
+    const anchorY = pos.y + ANCHOR_Y
+    const newX = Math.max(0, anchorX - BALL_CX)
+    const newY = Math.max(0, anchorY - BALL_CY)
     transitioning.value = true
     collapsed.value = true
     await new Promise(r => setTimeout(r, 500))
+    await setWinPos(newX, newY)
     await setSize(48, 48)
     transitioning.value = false
   }
@@ -173,7 +216,7 @@ function onKey(e: KeyboardEvent) { if (e.key === 'Enter') { e.preventDefault(); 
     <div class="p-head" data-tauri-drag-region>
       <span class="p-title">梦金囊</span>
       <button class="p-btn" @click="toggleCollapse" title="收成小球">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 14 12 20 20 14"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="8 12 12 8 16 12"/><line x1="12" y1="16" x2="12" y2="8"/></svg>
       </button>
     </div>
 
@@ -341,15 +384,34 @@ html, body, #app {
   display: flex; flex-direction: column; height: 100vh;
   background: var(--surface); color: var(--fg); font-size: 13px;
   overflow: hidden;
+  border-radius: 14px;
 }
 .p-head {
   display: flex; align-items: center; justify-content: space-between;
   padding: 9px 14px; flex-shrink: 0;
   background: color-mix(in oklch, var(--accent) 6%, var(--surface));
+  border-radius: 14px 14px 0 0;
 }
 .p-title { font-weight: 700; font-size: 13px; }
-.p-btn { border: none; background: none; color: var(--muted); cursor: pointer; padding: 2px; border-radius: 4px; }
-.p-btn:hover { color: var(--fg); background: color-mix(in oklch, var(--fg) 6%, transparent); }
+.p-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+.p-btn:hover {
+  color: var(--fg);
+  border-color: var(--accent);
+  background: color-mix(in oklch, var(--accent) 10%, transparent);
+  transform: rotate(180deg);
+}
+.p-btn svg {
+  width: 12px; height: 12px;
+}
 
 .p-accts {
   display: flex; gap: 5px; padding: 6px 10px; flex-wrap: wrap; align-items: center;
