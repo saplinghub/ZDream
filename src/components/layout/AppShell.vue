@@ -48,7 +48,12 @@ function go(path: string) {
 
 async function onOpenFloat() {
   if (isTauri()) {
-    await openFloat()
+    try {
+      await openFloat()
+      console.log('[AppShell] float window opened')
+    } catch (e) {
+      console.error('[AppShell] openFloat failed:', e)
+    }
   } else {
     store.showFloatWin = !store.showFloatWin
   }

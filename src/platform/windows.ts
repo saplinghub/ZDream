@@ -25,8 +25,8 @@ export async function openFloat(): Promise<void> {
   const w = new WebviewWindow(FLOAT_WINDOW, {
     url: floatUrl('/float'),
     title: '梦金囊',
-    width: 56,
-    height: 56,
+    width: 360,
+    height: 500,
     minWidth: 56,
     minHeight: 56,
     decorations: false,

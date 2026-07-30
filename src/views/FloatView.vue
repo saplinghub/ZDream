@@ -5,7 +5,7 @@ import { fmtDur, fmtMh, fmtTimeShort } from '@/utils/format'
 import { applyDesktopChrome } from '@/platform/desktop'
 
 const store = useAppStore()
-const collapsed = ref(true) // 默认收起为小球
+const collapsed = ref(false)
 
 const itemInput = ref('')
 const qty = ref(1)
