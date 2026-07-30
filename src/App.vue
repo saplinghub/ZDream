@@ -40,7 +40,10 @@ function onKey(e: KeyboardEvent) {
 
 onMounted(() => {
   window.addEventListener('keydown', onKey)
-  applyDesktopChrome()
+  // 浮窗/独立窗口路由必须完全透明，不能注入 desktop-host 类
+  if (!isAuxChrome.value) {
+    applyDesktopChrome()
+  }
 })
 
 onUnmounted(() => window.removeEventListener('keydown', onKey))

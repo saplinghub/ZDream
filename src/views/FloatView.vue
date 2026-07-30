@@ -2,8 +2,6 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { fmtDur, fmtMh, fmtTimeShort } from '@/utils/format'
-import { applyDesktopChrome } from '@/platform/desktop'
-
 const store = useAppStore()
 const collapsed = ref(false)
 
@@ -59,10 +57,25 @@ watch(() => store.accounts, () => {
 
 const recent = computed(() => store.records.slice(0, 3))
 const events = computed(() => store.events.slice(0, 30))
-const badge = computed(() => Math.min(store.events.length + store.quickRecordCount, 99))
+
+
+function forceTransparent() {
+  document.documentElement.style.setProperty('background', 'transparent', 'important')
+  document.body.style.setProperty('background', 'transparent', 'important')
+  document.documentElement.classList.remove('desktop-host', 'tauri-host')
+  document.body.classList.remove('desktop-host', 'tauri-host')
+  const app = document.getElementById('app')
+  if (app) {
+    app.style.setProperty('background', 'transparent', 'important')
+    app.classList.remove('desktop-host', 'tauri-host')
+  }
+}
+
+// 模块加载时立即执行（早于 onMounted）
+forceTransparent()
 
 onMounted(() => {
-  applyDesktopChrome()
+  forceTransparent()
   currentAccountId.value = onlineList.value[0]?.id || store.accounts[0]?.id || ''
   window.addEventListener('blur', onBlur)
 })
@@ -72,7 +85,7 @@ function onBlur() {
   // 展开态失焦 → 自动收成小球
   if (!collapsed.value) {
     collapsed.value = true
-    setSize(56, 56)
+    setSize(48, 48)
   }
 }
 
@@ -87,7 +100,7 @@ async function setSize(w: number, h: number) {
 async function toggleCollapse() {
   collapsed.value = !collapsed.value
   if (collapsed.value) {
-    setSize(56, 56)
+    setSize(48, 48)
   } else {
     setSize(360, 500)
     setTimeout(() => {
@@ -128,14 +141,14 @@ function onKey(e: KeyboardEvent) { if (e.key === 'Enter') { e.preventDefault(); 
 </script>
 
 <template>
-  <!-- 收起态：极简小球 -->
-  <div v-if="collapsed" class="ball-wrap">
-    <div class="ball" :class="{ pressing: pressing, dragging: isDragging }" @mousedown="onBallDown">
-      <div class="ball-inner">
-        <span class="ball-letter">梦</span>
-      </div>
-      <span v-if="badge > 0" class="ball-badge">{{ badge }}</span>
-    </div>
+  <!-- 收起态：纯透明悬浮球 -->
+  <div
+    v-if="collapsed"
+    class="ball"
+    :class="{ pressing: pressing, dragging: isDragging }"
+    @mousedown="onBallDown"
+  >
+    <span class="ball-letter">梦</span>
   </div>
 
   <!-- 展开态 -->
@@ -198,67 +211,93 @@ function onKey(e: KeyboardEvent) { if (e.key === 'Enter') { e.preventDefault(); 
 </template>
 
 <style>
-/* 全局：透明窗口无边框（覆盖 tokens.css 的 body.tauri-host #app） */
-html, body, #app,
-body.tauri-host #app,
-body.desktop-host #app,
-html.tauri-host, body.tauri-host {
-  margin: 0 !important; padding: 0 !important;
+/* 窗口级：强制透明，抵御 tokens.css 的 desktop-host 背景 */
+html, body, #app {
+  margin: 0 !important;
+  padding: 0 !important;
   background: transparent !important;
   overflow: hidden !important;
 }
 </style>
 <style scoped>
-/* 小球容器：全窗口居中 */
-.ball-wrap {
-  width: 100vw; height: 100vh; display: grid; place-items: center;
-}
-/* ─── 收起态小球（参考 floatingBall.html 设计）─── */
+/* ─── 收起态悬浮球（参考 deepseek_html 样式）─── */
 .ball {
-  width: 48px; height: 48px; border-radius: 50%;
-  position: relative; cursor: pointer;
+  position: fixed;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: 48px; height: 48px;
+  border-radius: 50%;
+
+  /* 无外框、无背景、无阴影 */
+  background: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
   transition: transform 0.15s ease;
-  margin: auto;
 }
-/* 彩虹渐变边框 */
+
+/* 外圈彩虹环 */
 .ball::before {
   content: '';
-  position: absolute; inset: 0; border-radius: 50%;
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
   padding: 3px;
-  background: conic-gradient(from 0deg, #f43f5e, #ec4899, #a855f7, #6366f1, #3b82f6, #06b6d4, #10b981, #eab308, #f97316, #f43f5e);
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  background: conic-gradient(
+    from 180deg,
+    #ff5f6d,
+    #ffc371,
+    #3ca8ff,
+    #768aff,
+    #ff5f6d
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
-  animation: border-spin 3s linear infinite;
+  pointer-events: none;
 }
-/* 毛玻璃内圆 */
-.ball-inner {
-  position: absolute; inset: 3px; border-radius: 50%;
-  background: rgba(255,255,255,0.08);
+
+/* 内圆：半透明毛玻璃 */
+.ball::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  display: flex; align-items: center; justify-content: center;
+  z-index: 1;
 }
-/* 渐变字 */
+
+/* 渐变文字「梦」 */
 .ball-letter {
+  position: relative;
+  z-index: 2;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  font-size: 22px; font-weight: 700; line-height: 1; pointer-events: none;
-  background: conic-gradient(from 0deg, #f43f5e, #ec4899, #a855f7, #6366f1, #3b82f6, #06b6d4, #10b981, #eab308, #f97316, #f43f5e);
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1;
+  pointer-events: none;
+  background: linear-gradient(to bottom right, #ff5f6d, #768aff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
-/* 数字角标 */
-.ball-badge {
-  position: absolute; top: -2px; right: -2px; z-index: 2;
-  min-width: 17px; height: 17px; border-radius: 50%;
-  background: #ff4757; color: #fff; font-size: 10px; font-weight: 700;
-  display: grid; place-items: center; pointer-events: none;
+
+/* 交互 */
+.ball.pressing {
+  transform: translate(-50%, -50%) scale(0.92);
 }
-/* 状态 */
-.ball.pressing { transform: scale(0.92); }
-.ball.dragging { transform: scale(1); opacity: 0.8; transition: none; }
-@keyframes border-spin {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
+.ball.dragging {
+  transform: translate(-50%, -50%) scale(1);
+  opacity: 0.8;
+  transition: none;
 }
 
 /* ─── 展开态面板 ─── */
