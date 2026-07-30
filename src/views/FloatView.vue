@@ -7,6 +7,37 @@ import { applyDesktopChrome } from '@/platform/desktop'
 const store = useAppStore()
 const collapsed = ref(false)
 
+// ── 点击 vs 拖动 ──
+let dragStart = { x: 0, y: 0 }
+let dragging = false
+const DRAG_THRESHOLD = 4 // 像素
+
+function onBallDown(e: MouseEvent) {
+  dragStart = { x: e.screenX, y: e.screenY }
+  dragging = false
+  document.addEventListener('mousemove', onBallMove)
+  document.addEventListener('mouseup', onBallUp)
+}
+
+function onBallMove(e: MouseEvent) {
+  if (!dragging && (Math.abs(e.screenX - dragStart.x) > DRAG_THRESHOLD || Math.abs(e.screenY - dragStart.y) > DRAG_THRESHOLD)) {
+    dragging = true
+    // Tauri 原生拖动
+    import('@tauri-apps/api/webviewWindow').then(({ getCurrentWebviewWindow }) => {
+      getCurrentWebviewWindow().startDragging()
+    })
+  }
+}
+
+function onBallUp(e: MouseEvent) {
+  document.removeEventListener('mousemove', onBallMove)
+  document.removeEventListener('mouseup', onBallUp)
+  if (!dragging) {
+    // 纯点击 → 展开
+    toggleCollapse()
+  }
+}
+
 const itemInput = ref('')
 const qty = ref(1)
 const price = ref<number | ''>('')
@@ -92,7 +123,7 @@ function onKey(e: KeyboardEvent) { if (e.key === 'Enter') { e.preventDefault(); 
 
 <template>
   <!-- 收起态：极简小球 -->
-  <div v-if="collapsed" class="ball" data-tauri-drag-region @click="toggleCollapse">
+  <div v-if="collapsed" class="ball" @mousedown="onBallDown">
     <svg class="ball-icon" viewBox="0 0 32 32" fill="none">
       <circle cx="16" cy="12" r="4" fill="currentColor" opacity="0.9"/>
       <path d="M6 26c0-5.5 4.5-10 10-10s10 4.5 10 10" stroke="currentColor" stroke-width="2.5" fill="none" opacity="0.9"/>
@@ -188,7 +219,7 @@ html, body, #app { margin: 0; padding: 0; background: transparent !important; ov
 .panel {
   display: flex; flex-direction: column; height: 100vh;
   background: var(--surface); color: var(--fg); font-size: 13px;
-  border-radius: 10px; overflow: hidden;
+  overflow: hidden;
 }
 .p-head {
   display: flex; align-items: center; justify-content: space-between;
