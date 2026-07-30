@@ -160,6 +160,10 @@ function onKey(e: KeyboardEvent) { if (e.key === 'Enter') { e.preventDefault(); 
   </div>
 </template>
 
+<style>
+/* 全局：透明窗口无边框 */
+html, body, #app { margin: 0; padding: 0; background: transparent !important; overflow: hidden; }
+</style>
 <style scoped>
 /* ─── 收起态小球 ─── */
 .ball {
