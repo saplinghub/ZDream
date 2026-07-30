@@ -82,19 +82,21 @@ onMounted(() => {
 onUnmounted(() => window.removeEventListener('blur', onBlur))
 
 async function onBlur() {
-  if (!collapsed.value && !transitioning.value) {
-    const pos = await getWinPos()
-    const anchorX = pos.x + ANCHOR_X
-    const anchorY = pos.y + ANCHOR_Y
-    const newX = Math.max(0, anchorX - BALL_CX)
-    const newY = Math.max(0, anchorY - BALL_CY)
-    transitioning.value = true
-    collapsed.value = true
-    await new Promise(r => setTimeout(r, 500))
-    await setWinPos(newX, newY)
-    await setSize(48, 48)
-    transitioning.value = false
-  }
+  if (collapsed.value || transitioning.value) return
+  const pos = await getWinPos()
+  const anchorX = pos.x + ANCHOR_X
+  const anchorY = pos.y + ANCHOR_Y
+  const newX = Math.max(0, anchorX - BALL_CX)
+  const newY = Math.max(0, anchorY - BALL_CY)
+  transitioning.value = true
+  resizing.value = true
+  collapsed.value = true
+  await new Promise(r => setTimeout(r, 250))
+  await Promise.all([setWinPos(newX, newY), setSize(48, 48)])
+  await new Promise(r => setTimeout(r, 100))
+  resizing.value = false
+  await new Promise(r => setTimeout(r, 350))
+  transitioning.value = false
 }
 
 async function setSize(w: number, h: number) {
@@ -133,37 +135,41 @@ const BALL_CX = 24
 const BALL_CY = 24
 
 const transitioning = ref(false)
+const resizing = ref(false) // 窗口缩放中，隐藏球避免漂移
 
 async function toggleCollapse() {
   if (transitioning.value) return
   const pos = await getWinPos()
+  transitioning.value = true
+
   if (collapsed.value) {
-    // ── 展开：锚点 = 小球中心，新窗口位置 = 锚点 - 面板中心偏移 ──
+    // ── 展开：先挪窗 + 调大小（球保持居中不漂），再切 DOM ──
     const anchorX = pos.x + BALL_CX
     const anchorY = pos.y + BALL_CY
     const newX = Math.max(0, anchorX - ANCHOR_X)
     const newY = Math.max(0, anchorY - ANCHOR_Y)
-    transitioning.value = true
-    collapsed.value = false
+    resizing.value = true
     await setWinPos(newX, newY)
     await setSize(PANEL_W, PANEL_H)
-    await new Promise(r => setTimeout(r, 50))
+    resizing.value = false
+    collapsed.value = false
+    await new Promise(r => setTimeout(r, 400))
     transitioning.value = false
-    setTimeout(() => {
-      const el = document.querySelector<HTMLInputElement>('.f-item-input')
-      el?.focus()
-    }, 350)
+    const el = document.querySelector<HTMLInputElement>('.f-item-input')
+    el?.focus()
   } else {
-    // ── 收起：锚点 = 面板中心，新窗口位置 = 锚点 - 小球中心偏移 ──
+    // ── 收起：先隐藏球 → 切 DOM → 挪窗+缩窗 → 显示球 ──
+    resizing.value = true
+    collapsed.value = true
+    await new Promise(r => setTimeout(r, 250))
     const anchorX = pos.x + ANCHOR_X
     const anchorY = pos.y + ANCHOR_Y
     const newX = Math.max(0, anchorX - BALL_CX)
     const newY = Math.max(0, anchorY - BALL_CY)
-    transitioning.value = true
-    collapsed.value = true
-    await new Promise(r => setTimeout(r, 500))
-    await setWinPos(newX, newY)
-    await setSize(48, 48)
+    await Promise.all([setWinPos(newX, newY), setSize(48, 48)])
+    await new Promise(r => setTimeout(r, 100))
+    resizing.value = false
+    await new Promise(r => setTimeout(r, 350))
     transitioning.value = false
   }
 }
@@ -205,7 +211,7 @@ function onKey(e: KeyboardEvent) { if (e.key === 'Enter') { e.preventDefault(); 
       v-if="collapsed"
       key="ball"
       class="ball"
-      :class="{ pressing: pressing, dragging: isDragging }"
+      :class="{ pressing: pressing, dragging: isDragging, resizing: resizing }"
       @mousedown="onBallDown"
     >
       <span class="ball-letter">梦</span>
@@ -377,6 +383,11 @@ html, body, #app {
 .ball.dragging {
   opacity: 0.8;
   transition: none;
+}
+.ball.resizing {
+  opacity: 0;
+  transition: none;
+  pointer-events: none;
 }
 
 /* ─── 展开态面板 ─── */
