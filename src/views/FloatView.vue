@@ -1,13 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { fmtDur, fmtMh, fmtTimeShort } from '@/utils/format'
 import { applyDesktopChrome } from '@/platform/desktop'
 
 const store = useAppStore()
-const collapsed = ref(false)
+const collapsed = ref(true) // 默认收起为小球
 
-// 记账表单
 const itemInput = ref('')
 const qty = ref(1)
 const price = ref<number | ''>('')
@@ -15,71 +14,49 @@ const io = ref<'in' | 'out'>('in')
 const feedback = ref('')
 let fbTimer: ReturnType<typeof setTimeout> | null = null
 
-// 选中的账号（记账时用）
 const onlineList = computed(() => store.accounts.filter((a) => a.online))
 const currentAccountId = ref('')
-
 watch(() => store.accounts, () => {
-  if (!currentAccountId.value) {
-    currentAccountId.value = onlineList.value[0]?.id || store.accounts[0]?.id || ''
-  }
+  if (!currentAccountId.value) currentAccountId.value = onlineList.value[0]?.id || store.accounts[0]?.id || ''
 }, { immediate: true })
 
-// 最近记录 + 动态事件
 const recent = computed(() => store.records.slice(0, 3))
 const events = computed(() => store.events.slice(0, 30))
-
-// 角标：动态事件数 + 本次记账笔数
-const badge = computed(() => {
-  const total = store.events.length + store.quickRecordCount
-  return Math.min(total, 99)
-})
+const badge = computed(() => Math.min(store.events.length + store.quickRecordCount, 99))
 
 onMounted(() => {
   applyDesktopChrome()
   currentAccountId.value = onlineList.value[0]?.id || store.accounts[0]?.id || ''
+  window.addEventListener('blur', onBlur)
 })
+onUnmounted(() => window.removeEventListener('blur', onBlur))
 
-const POS_KEY = 'mhxy-zdream:float-pos'
-
-async function savePos() {
-  try {
-    const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow')
-    const pos = await getCurrentWebviewWindow().outerPosition()
-    localStorage.setItem(POS_KEY, JSON.stringify({ x: pos.x, y: pos.y }))
-  } catch { /* ignore */ }
+function onBlur() {
+  // 展开态失焦 → 自动收成小球
+  if (!collapsed.value) {
+    collapsed.value = true
+    setSize(56, 56)
+  }
 }
 
-async function restorePos() {
+async function setSize(w: number, h: number) {
   try {
-    const raw = localStorage.getItem(POS_KEY)
-    if (!raw) return
-    const { x, y } = JSON.parse(raw)
+    const { LogicalSize } = await import('@tauri-apps/api/dpi')
     const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow')
-    const { PhysicalPosition } = await import('@tauri-apps/api/dpi')
-    await getCurrentWebviewWindow().setPosition(new PhysicalPosition(x, y))
+    await getCurrentWebviewWindow().setSize(new LogicalSize(w, h))
   } catch { /* ignore */ }
 }
 
 async function toggleCollapse() {
   collapsed.value = !collapsed.value
-  try {
-    const { LogicalSize } = await import('@tauri-apps/api/dpi')
-    const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow')
-    const win = getCurrentWebviewWindow()
-    if (collapsed.value) {
-      await savePos()
-      await win.setSize(new LogicalSize(60, 60))
-    } else {
-      await restorePos()
-      await win.setSize(new LogicalSize(360, 500))
-      setTimeout(() => {
-        const el = document.querySelector<HTMLInputElement>('.f-item-input')
-        el?.focus()
-      }, 200)
-    }
-  } catch (e) {
-    console.error('toggleCollapse:', e)
+  if (collapsed.value) {
+    setSize(56, 56)
+  } else {
+    setSize(360, 500)
+    setTimeout(() => {
+      const el = document.querySelector<HTMLInputElement>('.f-item-input')
+      el?.focus()
+    }, 200)
   }
 }
 
@@ -89,231 +66,178 @@ function flash(msg: string) {
   fbTimer = setTimeout(() => { feedback.value = '' }, 2000)
 }
 
-function submit() {
-  if (!itemInput.value.trim()) return
-  const ok = store.addGameRecord({
-    accountId: currentAccountId.value,
-    item: itemInput.value.trim(),
-    qty: qty.value,
-    price: Number(price.value) || 0,
-    io: io.value,
-    sub: '日常',
-  })
-  if (ok) {
-    store.quickRecordCount++
-    flash(`${io.value === 'in' ? '+' : '-'}${total.value}`)
-    itemInput.value = ''
-    qty.value = 1
-    price.value = ''
-  }
-}
-
 const total = computed(() => {
   const p = Number(price.value) || 0
   if (!p) return ''
   return fmtMh(io.value === 'in' ? qty.value * p : -qty.value * p)
 })
 
-function onKey(e: KeyboardEvent) {
-  if (e.key === 'Enter') { e.preventDefault(); submit() }
+function submit() {
+  if (!itemInput.value.trim()) return
+  const ok = store.addGameRecord({
+    accountId: currentAccountId.value,
+    item: itemInput.value.trim(),
+    qty: qty.value, price: Number(price.value) || 0,
+    io: io.value, sub: '日常',
+  })
+  if (ok) {
+    store.quickRecordCount++
+    flash(`${io.value === 'in' ? '+' : '-'}${total.value}`)
+    itemInput.value = ''; qty.value = 1; price.value = ''
+  }
 }
+
+function onKey(e: KeyboardEvent) { if (e.key === 'Enter') { e.preventDefault(); submit() } }
 </script>
 
 <template>
-  <!-- 收起态 -->
-  <div v-if="collapsed" class="dock" data-tauri-drag-region @click="toggleCollapse">
-    <span class="dock-emoji">💰</span>
-    <span v-if="badge > 0" class="dock-n">{{ badge }}</span>
+  <!-- 收起态：极简小球 -->
+  <div v-if="collapsed" class="ball" data-tauri-drag-region @click="toggleCollapse">
+    <svg class="ball-icon" viewBox="0 0 32 32" fill="none">
+      <circle cx="16" cy="12" r="4" fill="currentColor" opacity="0.9"/>
+      <path d="M6 26c0-5.5 4.5-10 10-10s10 4.5 10 10" stroke="currentColor" stroke-width="2.5" fill="none" opacity="0.9"/>
+      <circle cx="16" cy="16" r="15" stroke="currentColor" stroke-width="1" opacity="0.2"/>
+    </svg>
+    <span v-if="badge > 0" class="ball-badge">{{ badge }}</span>
   </div>
 
   <!-- 展开态 -->
-  <div v-else class="float">
-    <!-- 标题栏 -->
-    <div class="f-head" data-tauri-drag-region>
-      <span class="f-title">梦金囊</span>
-      <button class="btn btn-ghost btn-sm" @click="toggleCollapse">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="4 14 12 20 20 14" />
-        </svg>
+  <div v-else class="panel">
+    <div class="p-head" data-tauri-drag-region>
+      <span class="p-title">梦金囊</span>
+      <button class="p-btn" @click="toggleCollapse" title="收成小球">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 14 12 20 20 14"/></svg>
       </button>
     </div>
 
-    <!-- 在线账号 -->
-    <div class="f-online">
+    <div class="p-accts">
       <template v-if="onlineList.length">
-        <button
-          v-for="a in store.accounts" :key="a.id"
-          class="f-acct" :class="{ active: a.id === currentAccountId, on: a.online }"
-          @click="currentAccountId = a.id"
-        >
-          <span class="led" :class="{ on: a.online }" />
-          {{ a.name }}
-          <span v-if="a.online && a.since" class="f-dur">{{ fmtDur(Date.now() - a.since) }}</span>
+        <button v-for="a in store.accounts" :key="a.id" class="p-acct" :class="{ sel: a.id === currentAccountId }" @click="currentAccountId = a.id">
+          <span class="led" :class="{ on: a.online }"/>
+          <span>{{ a.name }}</span>
+          <span v-if="a.online && a.since" class="p-dur">{{ fmtDur(Date.now() - a.since) }}</span>
         </button>
       </template>
-      <span v-else class="meta">未上线</span>
-      <div style="flex:1" />
-      <span class="meta" style="font-size:11px">{{ onlineList.length }}/{{ store.accounts.length }} 在线</span>
+      <span v-else class="muted" style="padding:2px 0">未上线</span>
+      <span style="flex:1"/>
+      <span class="muted" style="font-size:10px">{{ onlineList.length }}/{{ store.accounts.length }}</span>
     </div>
 
-    <!-- 快捷记账 -->
-    <div class="f-inputs">
-      <input
-        v-model="itemInput" class="f-item-input"
-        type="text" placeholder="输入物品..." list="floatItemDict"
-        autofocus @keydown="onKey"
-      />
-      <datalist id="floatItemDict">
-        <option v-for="it in store.items" :key="it.name" :value="it.name" />
-      </datalist>
-      <div class="f-row">
-        <div class="f-qty">
+    <div class="p-record">
+      <input v-model="itemInput" class="p-input" type="text" placeholder="输入物品..." list="fdict" autofocus @keydown="onKey"/>
+      <datalist id="fdict"><option v-for="it in store.items" :key="it.name" :value="it.name"/></datalist>
+      <div class="p-row">
+        <div class="p-qty">
           <button @click="qty = Math.max(1, qty - 1)">−</button>
           <span>{{ qty }}</span>
           <button @click="qty = qty + 1">+</button>
         </div>
-        <input v-model.number="price" class="f-price" type="number" placeholder="@ 单价(选填)" />
-        <button class="f-io" :class="{ active: io === 'in', out: io === 'out' }" @click="io = io === 'in' ? 'out' : 'in'">
-          {{ io === 'in' ? '+收' : '−支' }}
-        </button>
-        <button class="f-submit" @click="submit">记录</button>
+        <input v-model.number="price" class="p-price" type="number" placeholder="@ 单价"/>
+        <button class="p-io" :class="{ out: io === 'out' }" @click="io = io === 'in' ? 'out' : 'in'">{{ io === 'in' ? '+收' : '−支' }}</button>
+        <button class="p-submit" @click="submit">记录</button>
       </div>
-      <div v-if="feedback" class="f-fb">{{ feedback }}</div>
+      <div v-if="feedback" class="p-fb">{{ feedback }}</div>
     </div>
 
-    <!-- 最近记录 -->
-    <div v-if="recent.length" class="f-section">
-      <div class="f-label">最近记录</div>
-      <button
-        v-for="r in recent" :key="r.id"
-        class="f-event" @click="store.openEditRecord(r.id)"
-      >
-        <span class="f-time">{{ fmtTimeShort(r.time) }}</span>
-        <span class="f-amt" :class="r.pos ? 'pos' : 'neg'">{{ r.amt }}</span>
-        <span class="f-tag">{{ r.tag }}</span>
+    <div v-if="recent.length" class="p-list">
+      <div class="p-label">最近</div>
+      <button v-for="r in recent" :key="r.id" class="p-ev" @click="store.openEditRecord(r.id)">
+        <span class="p-time">{{ fmtTimeShort(r.time) }}</span>
+        <span class="p-amt" :class="r.pos ? 'up' : 'dn'">{{ r.amt }}</span>
+        <span class="p-tag">{{ r.tag }}</span>
       </button>
     </div>
 
-    <!-- 动态事件 -->
-    <div class="f-section f-events">
-      <div class="f-label">动态</div>
-      <div v-if="!events.length" class="meta" style="padding:8px;text-align:center">暂无动态</div>
-      <div v-for="e in events" :key="e.id" class="f-event" :class="`kind-${e.kind}`">
-        <span class="f-time">{{ fmtTimeShort(e.time) }}</span>
-        <span class="f-tag">{{ {in:'收入',out:'消耗',sys:'系统',cbg:'藏宝阁'}[e.kind] }}</span>
-        <span class="f-text">{{ e.text }}</span>
+    <div class="p-list p-evts">
+      <div class="p-label">动态</div>
+      <div v-if="!events.length" class="muted" style="padding:12px;text-align:center">暂无动态</div>
+      <div v-for="e in events" :key="e.id" class="p-ev" :class="`k-${e.kind}`">
+        <span class="p-time">{{ fmtTimeShort(e.time) }}</span>
+        <span class="p-kind">{{ {in:'收入',out:'消耗',sys:'系统',cbg:'藏宝阁'}[e.kind] }}</span>
+        <span class="p-text">{{ e.text }}</span>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* ─── 收起态：极简悬浮球（参考 ZTools 设计） ─── */
-.dock {
-  width: 100vw; height: 100vh;
-  border-radius: 50%;
-  background: radial-gradient(circle at 40% 35%, #ffd700 0%, #f0a500 50%, #d4880f 100%);
-  box-shadow:
-    0 2px 12px rgba(0,0,0,0.3),
-    inset 0 1px 0 rgba(255,255,255,0.4);
-  display: grid; place-items: center;
-  cursor: pointer; position: relative;
-  font-size: 24px;
-  transition: transform 0.15s, box-shadow 0.15s;
+/* ─── 收起态小球 ─── */
+.ball {
+  width: 56px; height: 56px; border-radius: 50%;
+  background: radial-gradient(circle at 42% 38%, #ffe566, #f5b800 50%, #d4940a 100%);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+  display: grid; place-items: center; cursor: pointer;
+  position: relative; transition: transform 0.12s, box-shadow 0.12s;
+  -webkit-app-region: drag;
 }
-.dock:hover { transform: scale(1.06); box-shadow: 0 4px 18px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.4); }
-.dock:active { transform: scale(0.94); }
-.dock-emoji { filter: drop-shadow(0 1px 2px rgba(0,0,0,0.25)); pointer-events: none; }
-.dock-n {
-  position: absolute; top: 3px; right: 3px;
+.ball:hover  { transform: scale(1.08); box-shadow: 0 6px 22px rgba(0,0,0,0.45); }
+.ball:active { transform: scale(0.93); }
+.ball-icon { width: 16px; height: 16px; color: #7a5500; pointer-events: none; }
+.ball-badge {
+  position: absolute; top: 2px; right: 2px;
   min-width: 17px; height: 17px; border-radius: 50%;
-  background: #ff4757; color: #fff;
-  font-size: 10px; font-weight: 700;
-  display: grid; place-items: center;
-  pointer-events: none;
+  background: #ff4757; color: #fff; font-size: 10px; font-weight: 700;
+  display: grid; place-items: center; pointer-events: none;
 }
 
-/* ─── 展开态 ─── */
-.float {
+/* ─── 展开态面板 ─── */
+.panel {
   display: flex; flex-direction: column; height: 100vh;
-  background: var(--surface); color: var(--fg); font-size: 13px; overflow: hidden;
+  background: var(--surface); color: var(--fg); font-size: 13px;
+  border-radius: 10px; overflow: hidden;
 }
-.f-head {
+.p-head {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 8px 12px; cursor: grab; flex-shrink: 0;
-  background: color-mix(in oklch, var(--accent) 8%, var(--surface));
-  border-bottom: 1px solid var(--border);
+  padding: 9px 14px; flex-shrink: 0;
+  background: color-mix(in oklch, var(--accent) 6%, var(--surface));
 }
-.f-title { font-weight: 700; font-size: 14px; }
-.f-online {
+.p-title { font-weight: 700; font-size: 13px; }
+.p-btn { border: none; background: none; color: var(--muted); cursor: pointer; padding: 2px; border-radius: 4px; }
+.p-btn:hover { color: var(--fg); background: color-mix(in oklch, var(--fg) 6%, transparent); }
+
+.p-accts {
   display: flex; gap: 5px; padding: 6px 10px; flex-wrap: wrap; align-items: center;
   border-bottom: 1px solid var(--border); flex-shrink: 0;
 }
-.f-acct {
+.p-acct {
   display: flex; align-items: center; gap: 3px;
-  padding: 2px 8px; border: 1px solid var(--border); border-radius: 12px;
-  background: var(--surface); color: var(--fg); font-size: 11px; cursor: pointer;
+  padding: 2px 8px; border: 1px solid var(--border); border-radius: 10px;
+  background: none; color: var(--fg); font-size: 10px; cursor: pointer;
 }
-.f-acct.active { border-color: var(--accent); background: color-mix(in oklch, var(--accent) 10%, var(--surface)); }
-.f-dur { color: var(--muted); font-size: 10px; margin-left: 2px; }
+.p-acct.sel { border-color: var(--accent); background: color-mix(in oklch, var(--accent) 8%, transparent); }
+.p-dur { color: var(--muted); font-size: 9px; }
+.muted { color: var(--muted); font-size: 11px; }
 
-/* 记账输入区 */
-.f-inputs { padding: 8px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
-.f-item-input {
-  width: 100%; padding: 8px 12px; border: 2px solid var(--border); border-radius: 10px;
-  background: var(--surface); color: var(--fg); font-size: 16px; font-weight: 600;
+.p-record { padding: 8px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.p-input {
+  width: 100%; padding: 8px 12px; border: 1.5px solid var(--border); border-radius: 8px;
+  background: var(--surface); color: var(--fg); font-size: 15px; font-weight: 600;
   text-align: center; outline: none; margin-bottom: 6px;
 }
-.f-item-input:focus { border-color: var(--accent); }
-.f-row { display: flex; gap: 6px; align-items: center; }
-.f-qty {
-  display: flex; align-items: center; border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
-}
-.f-qty button {
-  width: 28px; height: 28px; border: none; background: transparent; color: var(--fg);
-  font-size: 15px; cursor: pointer; display: grid; place-items: center;
-}
-.f-qty span { min-width: 24px; text-align: center; font-weight: 700; font-size: 14px; }
-.f-price {
-  flex: 1; border: 1px solid var(--border); border-radius: 8px; padding: 5px 8px;
-  background: transparent; color: var(--fg); font-size: 13px; outline: none; min-width: 0;
-}
-.f-price:focus { border-color: var(--accent); }
-.f-io {
-  padding: 5px 10px; border: 2px solid var(--accent); border-radius: 8px;
-  background: color-mix(in oklch, var(--accent) 12%, var(--surface));
-  color: var(--accent); font-weight: 700; font-size: 12px; cursor: pointer; white-space: nowrap;
-}
-.f-io.out {
-  border-color: var(--danger); background: color-mix(in oklch, var(--danger) 10%, var(--surface)); color: var(--danger);
-}
-.f-submit {
-  padding: 5px 12px; border: none; border-radius: 8px; background: var(--accent);
-  color: #fff; font-weight: 700; font-size: 13px; cursor: pointer; white-space: nowrap;
-}
-.f-fb { text-align: center; color: var(--accent); font-weight: 600; font-size: 12px; margin-top: 4px; }
+.p-input:focus { border-color: var(--accent); }
+.p-row { display: flex; gap: 5px; align-items: center; }
+.p-qty { display: flex; align-items: center; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.p-qty button { width: 26px; height: 26px; border: none; background: none; color: var(--fg); font-size: 14px; cursor: pointer; }
+.p-qty span { min-width: 22px; text-align: center; font-weight: 700; font-size: 13px; }
+.p-price { flex:1; border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; background: none; color: var(--fg); font-size: 12px; outline: none; min-width:0; }
+.p-price:focus { border-color: var(--accent); }
+.p-io { padding: 4px 9px; border: 1.5px solid var(--accent); border-radius: 6px; background: color-mix(in oklch, var(--accent) 10%, transparent); color: var(--accent); font-weight: 700; font-size: 11px; cursor: pointer; white-space: nowrap; }
+.p-io.out { border-color: var(--danger); background: color-mix(in oklch, var(--danger) 8%, transparent); color: var(--danger); }
+.p-submit { padding: 4px 10px; border: none; border-radius: 6px; background: var(--accent); color: #fff; font-weight: 700; font-size: 12px; cursor: pointer; }
+.p-fb { text-align: center; color: var(--accent); font-weight: 600; font-size: 12px; margin-top: 4px; }
 
-/* 列表区 */
-.f-section { border-bottom: 1px solid var(--border); padding: 6px 0; flex-shrink: 0; }
-.f-events { flex: 1; overflow-y: auto; border-bottom: none; }
-.f-label {
-  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
-  color: var(--muted); padding: 0 10px; margin-bottom: 2px;
-}
-.f-event {
-  display: flex; align-items: center; gap: 6px; width: 100%;
-  padding: 3px 10px; border: none; background: transparent; color: var(--fg);
-  cursor: pointer; font-size: 11px; text-align: left;
-}
-.f-event:hover { background: color-mix(in oklch, var(--fg) 3%, transparent); }
-.f-time { color: var(--muted); font-family: var(--font-mono); font-size: 10px; min-width: 30px; }
-.f-amt { font-family: var(--font-mono); font-weight: 600; min-width: 52px; text-align: right; font-size: 11px; }
-.f-amt.pos { color: var(--accent); }
-.f-amt.neg { color: var(--danger); }
-.f-tag { font-size: 10px; padding: 0 5px; border-radius: 4px; }
-.f-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
-.kind-in .f-tag { background: color-mix(in oklch, var(--accent) 15%, transparent); color: var(--accent); }
-.kind-out .f-tag { background: color-mix(in oklch, var(--danger) 12%, transparent); color: var(--danger); }
-.kind-cbg .f-tag { background: color-mix(in oklch, #6c5ce7 12%, transparent); color: #a29bfe; }
-.kind-sys .f-tag { color: var(--muted); }
+.p-list { border-bottom: 1px solid var(--border); padding: 4px 0; flex-shrink: 0; }
+.p-evts { flex:1; overflow-y:auto; border-bottom:none; }
+.p-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 0 10px; margin-bottom: 2px; }
+.p-ev { display: flex; align-items: center; gap: 6px; padding: 3px 10px; border: none; background: none; color: var(--fg); cursor: pointer; font-size: 11px; text-align: left; width:100%; }
+.p-ev:hover { background: color-mix(in oklch, var(--fg) 3%, transparent); }
+.p-time { color: var(--muted); font-family: var(--font-mono); font-size: 9px; min-width: 30px; }
+.p-amt { font-family: var(--font-mono); font-weight: 600; min-width: 50px; text-align: right; font-size: 11px; }
+.p-amt.up { color: var(--accent); } .p-amt.dn { color: var(--danger); }
+.p-tag { font-size: 10px; } .p-text { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px; }
+.p-kind { font-size: 9px; padding: 0 4px; border-radius: 3px; }
+.k-in .p-kind  { background: color-mix(in oklch, var(--accent) 15%, transparent); color: var(--accent); }
+.k-out .p-kind { background: color-mix(in oklch, var(--danger) 12%, transparent); color: var(--danger); }
+.k-cbg .p-kind { background: color-mix(in oklch, #6c5ce7 12%, transparent); color: #a29bfe; }
+.k-sys .p-kind { color: var(--muted); }
 </style>
