@@ -40,6 +40,27 @@ onMounted(() => {
   currentAccountId.value = onlineList.value[0]?.id || store.accounts[0]?.id || ''
 })
 
+const POS_KEY = 'mhxy-zdream:float-pos'
+
+async function savePos() {
+  try {
+    const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow')
+    const pos = await getCurrentWebviewWindow().outerPosition()
+    localStorage.setItem(POS_KEY, JSON.stringify({ x: pos.x, y: pos.y }))
+  } catch { /* ignore */ }
+}
+
+async function restorePos() {
+  try {
+    const raw = localStorage.getItem(POS_KEY)
+    if (!raw) return
+    const { x, y } = JSON.parse(raw)
+    const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow')
+    const { PhysicalPosition } = await import('@tauri-apps/api/dpi')
+    await getCurrentWebviewWindow().setPosition(new PhysicalPosition(x, y))
+  } catch { /* ignore */ }
+}
+
 async function toggleCollapse() {
   collapsed.value = !collapsed.value
   try {
@@ -47,8 +68,10 @@ async function toggleCollapse() {
     const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow')
     const win = getCurrentWebviewWindow()
     if (collapsed.value) {
-      await win.setSize(new LogicalSize(64, 64))
+      await savePos()
+      await win.setSize(new LogicalSize(60, 60))
     } else {
+      await restorePos()
       await win.setSize(new LogicalSize(360, 500))
       setTimeout(() => {
         const el = document.querySelector<HTMLInputElement>('.f-item-input')
@@ -56,7 +79,7 @@ async function toggleCollapse() {
       }, 200)
     }
   } catch (e) {
-    console.error('setSize:', e)
+    console.error('toggleCollapse:', e)
   }
 }
 
@@ -185,20 +208,29 @@ function onKey(e: KeyboardEvent) {
 </template>
 
 <style scoped>
-/* ─── 收起态 ─── */
+/* ─── 收起态：极简悬浮球（参考 ZTools 设计） ─── */
 .dock {
-  width: 100vw; height: 100vh; border-radius: 50%;
-  background: radial-gradient(circle at 38% 35%, #ffe066, #f0b90b 45%, #d49400 90%);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.45), inset 0 -2px 4px rgba(0,0,0,0.25), inset 0 2px 4px rgba(255,255,255,0.3);
-  display: grid; place-items: center; cursor: pointer; position: relative; font-size: 26px;
+  width: 100vw; height: 100vh;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #ffd700 0%, #f0a500 50%, #d4880f 100%);
+  box-shadow:
+    0 2px 12px rgba(0,0,0,0.3),
+    inset 0 1px 0 rgba(255,255,255,0.4);
+  display: grid; place-items: center;
+  cursor: pointer; position: relative;
+  font-size: 24px;
+  transition: transform 0.15s, box-shadow 0.15s;
 }
-.dock-emoji { filter: drop-shadow(0 2px 2px rgba(0,0,0,0.3)); }
+.dock:hover { transform: scale(1.06); box-shadow: 0 4px 18px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.4); }
+.dock:active { transform: scale(0.94); }
+.dock-emoji { filter: drop-shadow(0 1px 2px rgba(0,0,0,0.25)); pointer-events: none; }
 .dock-n {
-  position: absolute; top: 4px; right: 4px;
+  position: absolute; top: 3px; right: 3px;
   min-width: 17px; height: 17px; border-radius: 50%;
-  background: #e74c3c; color: #fff;
+  background: #ff4757; color: #fff;
   font-size: 10px; font-weight: 700;
   display: grid; place-items: center;
+  pointer-events: none;
 }
 
 /* ─── 展开态 ─── */
