@@ -12,13 +12,8 @@ export {
 } from '@/platform/desktop'
 
 export {
-  LIVE_WINDOW,
-  LIVE_DOCK_WINDOW,
-  openLiveMonitor,
-  closeLiveMonitor,
-  collapseLiveMonitor,
-  expandLiveMonitor,
-  toggleLiveMonitor,
+  FLOAT_WINDOW,
+  openFloat,
+  closeFloat,
   focusMainWindow,
-  isLiveWindow,
 } from '@/platform/windows'

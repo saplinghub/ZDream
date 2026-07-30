@@ -41,31 +41,12 @@ const router = createRouter({
       component: () => import('@/views/SettingsView.vue'),
       meta: { title: '设置' },
     },
-    // 独立悬浮窗路由（无主壳）
+    // 统一悬浮窗（独立窗口）—— 动态 + 快捷记账
     {
-      path: '/live-float',
-      name: 'live-float',
-      component: () => import('@/views/LiveFloatView.vue'),
-      meta: { title: '在线动态', chrome: 'float' },
-    },
-    {
-      path: '/live-dock',
-      name: 'live-dock',
-      component: () => import('@/views/LiveDockView.vue'),
-      meta: { title: '动态', chrome: 'dock' },
-    },
-    // 快捷记账浮窗（独立窗口）
-    {
-      path: '/quick-float',
-      name: 'quick-float',
-      component: () => import('@/views/QuickFloatView.vue'),
-      meta: { title: '快捷记账', chrome: 'float' },
-    },
-    {
-      path: '/quick-dock',
-      name: 'quick-dock',
-      component: () => import('@/views/QuickDockView.vue'),
-      meta: { title: '记账', chrome: 'dock' },
+      path: '/float',
+      name: 'float',
+      component: () => import('@/views/FloatView.vue'),
+      meta: { title: '梦金囊', chrome: 'float' },
     },
   ],
 })

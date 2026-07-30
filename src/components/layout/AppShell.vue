@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { fmtClock } from '@/utils/format'
 import { isTauri } from '@/platform/desktop'
-import { openLiveMonitor, openQuickFloat } from '@/platform/windows'
+import { openFloat } from '@/platform/windows'
 
 const icons: Record<string, string> = {
   dashboard: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>`,
@@ -46,15 +46,12 @@ function go(path: string) {
   router.push(path)
 }
 
-async function onOpenLiveFloat() {
+async function onOpenFloat() {
   if (isTauri()) {
-    await openLiveMonitor(true)
-    store.showLiveFloat = false
-    store.showFloatWin = false
-    return
+    await openFloat()
+  } else {
+    store.showFloatWin = !store.showFloatWin
   }
-  store.showLiveFloat = !store.showLiveFloat
-  if (store.showLiveFloat) store.showFloatWin = false
 }
 </script>
 
@@ -63,8 +60,8 @@ async function onOpenLiveFloat() {
     <div class="titlebar">
       <div class="brand"><b>梦金囊</b></div>
       <div class="titlebar-actions">
-        <button class="btn btn-ghost btn-sm" type="button" title="在线动态悬浮窗" @click="onOpenLiveFloat">
-          动态窗
+        <button class="btn btn-ghost btn-sm" type="button" title="悬浮窗" @click="onOpenFloat">
+          悬浮窗
         </button>
         <span class="meta num">{{ clock }}</span>
       </div>
@@ -105,18 +102,11 @@ async function onOpenLiveFloat() {
           <span v-if="item.key === 'live'" class="badge">{{ liveBadge }}</span>
         </button>
         <div class="nav-hint">
-          快捷记账<br />
+          悬浮窗<br />
           <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>
-          <div style="margin-top: 8px; display: flex; flex-direction: column; gap: 6px">
-            <button
-              class="btn btn-secondary btn-sm btn-block"
-              type="button"
-              @click="isTauri() ? openQuickFloat() : (store.showFloatWin = true)"
-            >
-              快捷记账
-            </button>
-            <button class="btn btn-secondary btn-sm btn-block" type="button" @click="onOpenLiveFloat">
-              动态悬浮窗
+          <div style="margin-top: 8px">
+            <button class="btn btn-secondary btn-sm btn-block" type="button" @click="onOpenFloat">
+              打开悬浮窗
             </button>
           </div>
         </div>

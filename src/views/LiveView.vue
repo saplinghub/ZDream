@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { fmtDur, fmtTimeShort } from '@/utils/format'
 import { isTauri } from '@/platform/desktop'
-import { toggleLiveMonitor } from '@/platform/windows'
+import { openFloat } from '@/platform/windows'
 
 const store = useAppStore()
 const floatOn = ref(false)
@@ -20,8 +20,8 @@ function kindLabel(k: string) {
 
 async function toggleFloat() {
   if (isTauri()) {
-    floatOn.value = await toggleLiveMonitor()
-    store.showLiveFloat = false
+    await openFloat()
+    floatOn.value = true
     return
   }
   store.showLiveFloat = !store.showLiveFloat
