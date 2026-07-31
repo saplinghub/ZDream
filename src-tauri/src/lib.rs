@@ -21,7 +21,7 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
-            // Float 窗口预创建，macOS 设为非激活面板
+            // Float 窗口预创建
             #[cfg(target_os = "macos")]
             {
                 let win = tauri::WebviewWindowBuilder::new(
@@ -42,12 +42,13 @@ pub fn run() {
                 .build()?;
 
                 // 设为 NSNonactivatingPanelMask：点击不激活应用
-                let ns_win = win.ns_window().expect("failed to get NSWindow") as *mut objc2::runtime::Object;
-                unsafe {
-                    use objc2::{msg_send, sel};
-                    let current_mask: u64 = msg_send![ns_win, styleMask];
-                    // NSNonactivatingPanelMask = 1 << 7 = 128
-                    let _: () = msg_send![ns_win, setStyleMask: current_mask | 128u64];
+                if let Ok(ns_win) = win.ns_window() {
+                    let ns_win = ns_win as *mut objc2::runtime::Object;
+                    unsafe {
+                        use objc2::{msg_send, sel};
+                        let current_mask: u64 = msg_send![ns_win, styleMask];
+                        let _: () = msg_send![ns_win, setStyleMask: current_mask | 128u64];
+                    }
                 }
             }
             Ok(())

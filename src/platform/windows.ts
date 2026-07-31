@@ -14,11 +14,12 @@ function floatUrl(hashPath: string): string {
 // ── 统一悬浮窗 ──
 export async function openFloat(): Promise<void> {
   if (!isTauri()) return
+  try {
   const { getAllWebviewWindows } = await import('@tauri-apps/api/webviewWindow')
   const all = await getAllWebviewWindows()
   const existing = all.find((w) => w.label === FLOAT_WINDOW)
   if (existing) {
-    await existing.setVisibleOnAllWorkspaces(true)
+    try { await existing.setVisibleOnAllWorkspaces(true) } catch { /* 非 macOS 不支持 */ }
     await existing.show()
     await existing.setFocus()
     return
@@ -39,12 +40,16 @@ export async function openFloat(): Promise<void> {
     alwaysOnTop: true,
     skipTaskbar: true,
     visible: true,
+    focus: true,
     visibleOnAllWorkspaces: true,
   })
   await new Promise<void>((resolve, reject) => {
     w.once('tauri://created', () => resolve())
     w.once('tauri://error', (e) => reject(e))
   })
+  } catch (e) {
+    console.error('[windows] openFloat failed:', e)
+  }
 }
 
 export async function closeFloat(): Promise<void> {
