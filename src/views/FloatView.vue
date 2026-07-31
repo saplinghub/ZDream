@@ -42,7 +42,6 @@ function onBallUp(_e: MouseEvent) {
   document.removeEventListener('mouseup', onBallUp)
   pressing.value = false
   if (!isDragging.value) {
-    showMainWindow()
     toggleCollapse()
   }
   isDragging.value = false
