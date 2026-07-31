@@ -63,11 +63,11 @@ function onBallMove(e: MouseEvent) {
     isDragging.value = true
     pressing.value = false
   }
-  // 绝对定位：窗口 = 鼠标物理位置 - 固定偏移（fire-and-forget）
+  // 绝对定位：窗口 = 鼠标物理位置 - 固定偏移（必须整数，Tauri set_position 要求 i32）
   if (e.timeStamp - dragFrame > 8) { // 限频 ~120fps
     dragFrame = e.timeStamp
-    const x = mx - dragOffsetX
-    const y = my - dragOffsetY
+    const x = Math.round(mx - dragOffsetX)
+    const y = Math.round(my - dragOffsetY)
     winPos = { x, y }
     getCurrentWebviewWindow().setPosition(new PhysicalPosition(x, y)).catch((err) => {
       console.warn('[drag] setPosition ERROR:', err)
@@ -105,7 +105,8 @@ async function restoreBallPos() {
     if (!raw) return
     const { x, y } = JSON.parse(raw)
     const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow')
-    await getCurrentWebviewWindow().setPosition({ x, y } as any)
+    const { PhysicalPosition } = await import('@tauri-apps/api/dpi')
+    await getCurrentWebviewWindow().setPosition(new PhysicalPosition(Math.round(x), Math.round(y)))
   } catch { /* ignore */ }
 }
 
