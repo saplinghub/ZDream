@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { isTauri } from '@/platform/desktop'
 
 export interface UpdateAsset {
   name: string
@@ -87,6 +88,22 @@ export function useUpdateChecker() {
   const download = ref<DownloadState>({ downloading: false, progress: 0, fileName: '', savedPath: '', error: '' })
   let xhr: XMLHttpRequest | null = null
 
+  /** 平台 fetch：Tauri 走 Rust 侧 reqwest（无 CORS 限制），浏览器走原生 fetch */
+  async function platformFetch(
+    url: string,
+    init?: { headers?: Record<string, string>; connectTimeout?: number },
+  ): Promise<{ ok: boolean; status: number; arrayBuffer: () => Promise<ArrayBuffer>; json: () => Promise<unknown> }> {
+    if (isTauri()) {
+      const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http')
+      return tauriFetch(url, {
+        headers: init?.headers,
+        connectTimeout: init?.connectTimeout ?? 30000,
+      })
+    }
+    const res = await fetch(url, { headers: init?.headers })
+    return { ok: res.ok, status: res.status, arrayBuffer: () => res.arrayBuffer(), json: () => res.json() }
+  }
+
   async function getCurrentVersion(): Promise<string> {
     try {
       const { getVersion } = await import('@tauri-apps/api/app')
@@ -104,9 +121,9 @@ export function useUpdateChecker() {
       const current = await getCurrentVersion()
       const apiUrl = proxyUrl(GITHUB_API, proxy)
       console.info('[update] check', apiUrl)
-      const res = await fetch(apiUrl, {
+      const res = await platformFetch(apiUrl, {
         headers: { Accept: 'application/vnd.github+json' },
-        signal: ctrl.signal,
+        connectTimeout: 15000,
       })
       if (!res.ok) {
         if (res.status === 403) {
@@ -115,14 +132,17 @@ export function useUpdateChecker() {
         }
         throw new Error(`HTTP ${res.status}`)
       }
-      const release = await res.json()
+      const release = (await res.json()) as Record<string, unknown> & { tag_name?: string; body?: string; html_url?: string; assets?: unknown[] }
       const latest = parseVersion(release.tag_name || 'v0.0.0')
       const hasUpdate = compareVersion(latest, parseVersion(current)) > 0
-      const assets: UpdateAsset[] = (release.assets || []).map((a: Record<string, unknown>) => ({
-        name: String(a.name || ''),
-        url: String(a.browser_download_url || ''),
-        size: Number(a.size || 0),
-      }))
+      const assets: UpdateAsset[] = (release.assets || []).map((a: unknown) => {
+        const rec = a as Record<string, unknown>
+        return {
+          name: String(rec.name || ''),
+          url: String(rec.browser_download_url || ''),
+          size: Number(rec.size || 0),
+        }
+      })
       const { myAssets, best } = filterMyAssets(assets)
       const info: UpdateInfo = {
         currentVersion: current,
@@ -173,46 +193,29 @@ export function useUpdateChecker() {
     } catch { return false }
   }
 
-  /** XMLHttpRequest 下载，兼容 Tauri webview + 代理，带原生进度 */
+  /** 平台 fetch 下载（Tauri 走 Rust reqwest，无 CORS） */
   async function downloadUpdate(assetUrl: string, fileName: string, proxy = ''): Promise<string | null> {
     download.value = { downloading: true, progress: 0, fileName, savedPath: '', error: '' }
 
     try {
       const downloadUrl = proxyUrl(assetUrl, proxy)
+      console.info('[update] download start:', downloadUrl)
 
-      const data = await new Promise<ArrayBuffer>((resolve, reject) => {
-        const req = new XMLHttpRequest()
-        xhr = req
-        req.open('GET', downloadUrl, true)
-        req.responseType = 'arraybuffer'
-        req.timeout = 120000
+      const res = await platformFetch(downloadUrl, { connectTimeout: 120000 })
+      if (!res.ok) {
+        const msg =
+          res.status === 404 ? '文件不存在（可能构建中）'
+          : res.status === 403 ? '访问被拒绝（GitHub API 限流）'
+          : `下载失败 HTTP ${res.status}`
+        throw new Error(msg)
+      }
 
-        req.onprogress = (e) => {
-          if (e.lengthComputable) {
-            download.value.progress = Math.round((e.loaded / e.total) * 100)
-          }
-        }
-
-        req.onload = () => {
-          if (req.status >= 200 && req.status < 400) {
-            resolve(req.response as ArrayBuffer)
-          } else {
-            const msg =
-              req.status === 404 ? '文件不存在（可能构建中）'
-              : req.status === 403 ? '访问被拒绝（GitHub API 限流）'
-              : req.status === 0 ? '网络连接失败，请检查代理或网络'
-              : `下载失败 HTTP ${req.status}`
-            reject(new Error(msg))
-          }
-        }
-
-        req.onerror = () => reject(new Error('网络连接失败，请检查代理设置或网络'))
-        req.ontimeout = () => reject(new Error('下载超时（2分钟）'))
-        req.send()
-      })
-
+      // Rust 侧返回 ArrayBuffer 没有进度，这里用简易进度模拟（下载完成后直接 100%）
+      download.value.progress = 60
+      const data = await res.arrayBuffer()
       const merged = new Uint8Array(data)
       console.info('[update] downloaded bytes =', merged.length)
+      if (merged.length === 0) throw new Error('下载内容为空')
 
       // Tauri → 写 Downloads
       try {
@@ -241,6 +244,7 @@ export function useUpdateChecker() {
         return null
       }
       const msg = e instanceof Error ? e.message : '下载失败：网络不可用'
+      console.warn('[update] download failed:', e)
       download.value = { downloading: false, progress: 0, fileName: '', savedPath: '', error: msg }
       return null
     }
