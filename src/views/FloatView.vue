@@ -26,15 +26,6 @@ function onBallDown(e: MouseEvent) {
   dragStart = { x: e.screenX, y: e.screenY }
   isDragging.value = false
   pressing.value = true
-  winPosInit = false
-  // 按下时读取一次窗口位置
-  import('@tauri-apps/api/webviewWindow').then(async ({ getCurrentWebviewWindow }) => {
-    try {
-      const pos = await getCurrentWebviewWindow().outerPosition()
-      winPos = { x: pos.x, y: pos.y }
-      winPosInit = true
-    } catch { /* ignore */ }
-  })
   document.addEventListener('mousemove', onBallMove)
   document.addEventListener('mouseup', onBallUp)
 }
@@ -159,6 +150,16 @@ let unlistenOpen: (() => void) | null = null
 onMounted(async () => {
   forceTransparent()
   restoreBallPos()
+  // 预取窗口位置，拖拽时立即可用（避免 mousedown 后异步读取的延迟）
+  if (isTauri()) {
+    import('@tauri-apps/api/webviewWindow').then(async ({ getCurrentWebviewWindow }) => {
+      try {
+        const pos = await getCurrentWebviewWindow().outerPosition()
+        winPos = { x: pos.x, y: pos.y }
+        winPosInit = true
+      } catch { /* ignore */ }
+    })
+  }
   window.addEventListener('focus', onWindowFocus)
   window.addEventListener('blur', onBlur)
   // 主窗口热键触发时收到通知 → 展开 + 聚焦
