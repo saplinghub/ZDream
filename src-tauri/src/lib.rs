@@ -37,6 +37,7 @@ pub fn run() {
                 .transparent(true)
                 .always_on_top(true)
                 .skip_taskbar(true)
+                .visible_on_all_workspaces(true)
                 .visible(false)
                 .build()?;
 

@@ -18,6 +18,7 @@ export async function openFloat(): Promise<void> {
   const all = await getAllWebviewWindows()
   const existing = all.find((w) => w.label === FLOAT_WINDOW)
   if (existing) {
+    await existing.setVisibleOnAllWorkspaces(true)
     await existing.show()
     await existing.setFocus()
     return
@@ -38,6 +39,7 @@ export async function openFloat(): Promise<void> {
     alwaysOnTop: true,
     skipTaskbar: true,
     visible: true,
+    visibleOnAllWorkspaces: true,
   })
   await new Promise<void>((resolve, reject) => {
     w.once('tauri://created', () => resolve())
