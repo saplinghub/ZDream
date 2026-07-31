@@ -42,9 +42,12 @@ function onBallDown(e: MouseEvent) {
       dragOffsetX = cursor.x - winPos.x
       dragOffsetY = cursor.y - winPos.y
       winPosInit = true
-      console.info('[drag] calibrated, pxRatio =', pxRatio, 'win =', pos.x, pos.y)
+      console.info('[drag] calibrated | screenX =', e.screenX, '| cursor =', cursor.x, cursor.y, '| win =', pos.x, pos.y, '| pxRatio =', pxRatio)
     })
-    .catch(() => { winPosInit = false })
+    .catch((err) => {
+      winPosInit = false
+      console.warn('[drag] 校准失败:', err)
+    })
 }
 
 function onBallMove(e: MouseEvent) {
@@ -60,13 +63,15 @@ function onBallMove(e: MouseEvent) {
     isDragging.value = true
     pressing.value = false
   }
-  // 绝对定位：窗口 = 鼠标物理位置 - 固定偏移（fire-and-forget，无去重竞态）
+  // 绝对定位：窗口 = 鼠标物理位置 - 固定偏移（fire-and-forget）
   if (e.timeStamp - dragFrame > 8) { // 限频 ~120fps
     dragFrame = e.timeStamp
     const x = mx - dragOffsetX
     const y = my - dragOffsetY
     winPos = { x, y }
-    getCurrentWebviewWindow().setPosition(new PhysicalPosition(x, y)).catch(() => {})
+    getCurrentWebviewWindow().setPosition(new PhysicalPosition(x, y)).catch((err) => {
+      console.warn('[drag] setPosition ERROR:', err)
+    })
   }
 }
 
