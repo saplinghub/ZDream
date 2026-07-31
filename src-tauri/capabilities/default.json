@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2/capability",
   "identifier": "default",
-  "description": "Main and live float windows",
-  "windows": ["main", "float"],
+  "description": "Main and auxiliary windows",
+  "windows": ["main", "float", "capture"],
   "permissions": [
     "core:default",
     "core:window:default",

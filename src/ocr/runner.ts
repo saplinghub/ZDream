@@ -1,15 +1,17 @@
 /**
- * OCR 执行器：截图 → 选区 → 识别 → 状态流转
- * 供快捷键 / 设置页按钮 / 玩法模块调用
+ * OCR 执行器：截图 → 全屏遮罩选区 → 识别
+ * 快捷键 / 设置页按钮 / 玩法模块调用
  */
 import { useAppStore } from '@/stores/app'
 import { useOcrStore } from '@/stores/ocr'
 import { captureScreen, cleanupCapture } from '@/ocr/capture'
 import { notify } from '@/platform/desktop'
-import { showMainWindow } from '@/platform/windows'
+import { openCaptureWindow } from '@/platform/windows'
 import { logger } from '@/utils/logger'
 
-/** 截图后进入选区模式（等待用户框选后再识别） */
+const CAPTURE_KEY = 'mhxy-zdream:pending-capture'
+
+/** 截图 → 打开全屏遮罩窗口框选 */
 export async function runOcrCapture(): Promise<void> {
   const appStore = useAppStore()
   const ocrStore = useOcrStore()
@@ -24,7 +26,7 @@ export async function runOcrCapture(): Promise<void> {
   }
 
   if (ocrStore.capturing || ocrStore.selecting) {
-    logger.warn('ocr', '已有截图/识别任务进行中，忽略本次触发')
+    logger.warn('ocr', '已有截图任务进行中，忽略本次触发')
     return
   }
   ocrStore.setRunning(true)
@@ -32,13 +34,12 @@ export async function runOcrCapture(): Promise<void> {
   logger.info('ocr', '截图开始（全屏）')
 
   try {
-    // 选区遮罩在主窗口显示，确保主窗口可见
-    await showMainWindow()
     const shot = await captureScreen()
-    logger.info('ocr', `截图完成 ${shot.base64.length} 字节 base64，进入选区模式`)
+    logger.info('ocr', `截图完成 ${shot.base64.length} 字符 base64`)
     try {
-      // 显示选区遮罩，框选后再识别
-      ocrStore.startSelecting(`data:image/png;base64,${shot.base64}`)
+      // 跨窗口传截图：Tauri 多窗口共享 localStorage
+      localStorage.setItem(CAPTURE_KEY, `data:image/png;base64,${shot.base64}`)
+      await openCaptureWindow()
     } finally {
       await cleanupCapture(shot.filePath)
     }

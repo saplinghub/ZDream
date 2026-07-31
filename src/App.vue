@@ -8,13 +8,13 @@ import ListModal from '@/components/modals/ListModal.vue'
 import SoldModal from '@/components/modals/SoldModal.vue'
 import BuyModal from '@/components/modals/BuyModal.vue'
 import EditRecordModal from '@/components/modals/EditRecordModal.vue'
-import RegionSelector from '@/components/modals/RegionSelector.vue'
 import QuickFloat from '@/components/modals/QuickFloat.vue'
 import AppToast from '@/components/ui/AppToast.vue'
 import { useAppStore } from '@/stores/app'
+import { useOcrStore } from '@/stores/ocr'
 import { applyDesktopChrome, isTauri } from '@/platform/desktop'
 import { openFloat } from '@/platform/windows'
-import { setLogLevel } from '@/utils/logger'
+import { setLogLevel, logger } from '@/utils/logger'
 import {
   installDoubleShift,
   registerGlobalHotkey,
@@ -29,7 +29,7 @@ const route = useRoute()
 
 const isAuxChrome = computed(() => {
   const c = route.meta?.chrome
-  return c === 'float' || c === 'dock'
+  return c === 'float' || c === 'dock' || c === 'capture'
 })
 
 function onKey(e: KeyboardEvent) {
@@ -58,12 +58,32 @@ watch(() => store.settings.hotkey, (newKey, oldKey) => {
 
 onMounted(() => {
   window.addEventListener('keydown', onKey)
+  // 主窗口监听截图选区结果（从 capture 窗口发回）
+  if (!isAuxChrome.value && isTauri()) {
+    import('@tauri-apps/api/event').then(({ listen }) => {
+      listen('capture:result', (ev) => {
+        const payload = ev.payload as { ok: boolean; error?: string; lines?: string[]; words?: unknown[]; direction?: number; raw?: unknown }
+        const ocrStore = useOcrStore()
+        if (payload.ok) {
+          ocrStore.setResult({
+            lines: payload.lines || [],
+            words: (payload.words || []) as never,
+            direction: payload.direction || 0,
+            raw: payload.raw,
+          })
+        } else {
+          ocrStore.setError(payload.error || '未知错误')
+        }
+      })
+    })
+  }
   // 只有主窗口注册全局快捷键 + 双击 Shift
   if (!isAuxChrome.value) {
     applyDesktopChrome()
     registerGlobalHotkey(store.settings.hotkey || 'Ctrl+Shift+R')
     // OCR 截图快捷键
     registerGlobalShortcut(store.settings.ocrHotkey || 'Ctrl+Shift+S', () => {
+      logger.info('hotkey', 'OCR 截图快捷键触发')
       runOcrCapture()
     })
     removeDoubleShift = installDoubleShift(() => {
@@ -106,7 +126,5 @@ onUnmounted(() => {
     <!-- 浏览器降级：旧版快捷记账浮层 -->
     <QuickFloat />
     <AppToast />
-    <!-- OCR 选区遮罩 -->
-    <RegionSelector />
   </template>
 </template>

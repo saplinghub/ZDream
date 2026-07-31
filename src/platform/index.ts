@@ -13,8 +13,11 @@ export {
 
 export {
   FLOAT_WINDOW,
+  CAPTURE_WINDOW,
   openFloat,
   closeFloat,
+  openCaptureWindow,
+  closeCaptureWindow,
   focusMainWindow,
   showMainWindow,
 } from '@/platform/windows'

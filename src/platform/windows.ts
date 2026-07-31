@@ -78,3 +78,50 @@ export async function focusMainWindow(): Promise<void> {
 export async function showMainWindow(): Promise<void> {
   await focusMainWindow()
 }
+
+// ── 全屏截图选区窗口 ──
+export const CAPTURE_WINDOW = 'capture'
+
+/** 打开全屏透明遮罩窗口（屏幕直接划区域截图） */
+export async function openCaptureWindow(): Promise<void> {
+  if (!isTauri()) return
+  try {
+    const { getAllWebviewWindows, WebviewWindow } = await import('@tauri-apps/api/webviewWindow')
+    const all = await getAllWebviewWindows()
+    const existing = all.find((w) => w.label === CAPTURE_WINDOW)
+    if (existing) {
+      await existing.show()
+      await existing.setFocus()
+      return
+    }
+    const w = new WebviewWindow(CAPTURE_WINDOW, {
+      url: floatUrl('/capture'),
+      title: '截图',
+      fullscreen: true,
+      decorations: false,
+      transparent: true,
+      shadow: false,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      focus: true,
+      visible: true,
+    })
+    await new Promise<void>((resolve, reject) => {
+      w.once('tauri://created', () => resolve())
+      w.once('tauri://error', (e) => reject(e))
+    })
+  } catch (e) {
+    console.error('[windows] openCaptureWindow failed:', e)
+  }
+}
+
+export async function closeCaptureWindow(): Promise<void> {
+  if (!isTauri()) return
+  const { getAllWebviewWindows } = await import('@tauri-apps/api/webviewWindow')
+  const all = await getAllWebviewWindows()
+  for (const w of all) {
+    if (w.label === CAPTURE_WINDOW) {
+      await w.close()
+    }
+  }
+}

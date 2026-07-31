@@ -54,6 +54,13 @@ const router = createRouter({
       component: () => import('@/views/FloatView.vue'),
       meta: { title: '梦金囊', chrome: 'float' },
     },
+    // 全屏截图选区窗口（独立全屏窗口）
+    {
+      path: '/capture',
+      name: 'capture',
+      component: () => import('@/views/CaptureView.vue'),
+      meta: { title: '截图', chrome: 'capture' },
+    },
   ],
 })
 
