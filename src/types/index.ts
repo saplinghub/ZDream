@@ -105,6 +105,12 @@ export interface AppSettings {
   githubProxy: string
   /** 启动时自动打开悬浮球 */
   autoOpenFloat: boolean
+  /** 截图 OCR 快捷键 */
+  ocrHotkey: string
+  /** 百度 OCR API Key */
+  baiduApiKey: string
+  /** 百度 OCR Secret Key */
+  baiduSecretKey: string
 }
 
 /** 在线会话记录 */

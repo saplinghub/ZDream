@@ -5,8 +5,15 @@ import { THEMES } from '@/theme/themes'
 import type { ItemCategory } from '@/types'
 import { openTextFile } from '@/platform/desktop'
 import { useUpdateChecker } from '@/composables/useUpdateChecker'
+import { useOcrStore } from '@/stores/ocr'
+import { runOcrCapture } from '@/ocr/runner'
 
 const store = useAppStore()
+const ocr = useOcrStore()
+
+function runOcr() {
+  runOcrCapture()
+}
 
 const newAcct = reactive({ name: '', server: '', note: '' })
 const newItem = reactive({ name: '', cat: '消耗品' as ItemCategory, price: 0 })
@@ -353,6 +360,51 @@ async function onImportNative() {
         </div>
         <div class="meta">
           数据仅存本地（桌面 SQLite / 浏览器 localStorage）· 不上传云端 · Ctrl+Shift+R 快捷记账 · 动态可开独立悬浮窗
+        </div>
+      </div>
+
+      <!-- OCR 识别 -->
+      <div class="card settings-block stack" style="grid-column: 1 / -1">
+        <div class="row-between">
+          <h3>OCR 识别（截图）</h3>
+          <span class="meta" style="font-size: 12px">Ctrl+Shift+S 全局截图识别</span>
+        </div>
+        <div class="field">
+          <label>百度 OCR API Key</label>
+          <input
+            v-model="store.settings.baiduApiKey"
+            class="input"
+            placeholder="百度智能云控制台获取"
+            autocomplete="off"
+          />
+        </div>
+        <div class="field">
+          <label>百度 OCR Secret Key</label>
+          <input
+            v-model="store.settings.baiduSecretKey"
+            class="input"
+            type="password"
+            placeholder="百度智能云控制台获取"
+            autocomplete="off"
+          />
+        </div>
+        <div class="row" style="gap: 8px">
+          <button class="btn btn-secondary btn-sm" type="button" :disabled="ocr.capturing" @click="runOcr">
+            {{ ocr.capturing ? '识别中...' : '立即截图识别' }}
+          </button>
+          <span v-if="!store.settings.baiduApiKey || !store.settings.baiduSecretKey" class="meta" style="color: var(--warn)">
+            需先填写 Key 才能识别
+          </span>
+        </div>
+        <div v-if="ocr.error" class="meta" style="color: var(--danger); margin-top: 6px">
+          {{ ocr.error }}
+        </div>
+        <div v-if="ocr.result" class="meta" style="margin-top: 6px; max-height: 140px; overflow: auto; background: var(--bg); padding: 8px; border-radius: 6px; font-size: 12px">
+          <div style="font-weight: 600; margin-bottom: 4px">识别结果（{{ ocr.result.lines.length }} 行）</div>
+          <div v-for="(l, i) in ocr.result.lines" :key="i">{{ l }}</div>
+        </div>
+        <div class="meta" style="font-size: 11px; margin-top: 6px">
+          免费版每天 500 次高精度识别。Key 只存本地，不上传。
         </div>
       </div>
 

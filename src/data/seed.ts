@@ -268,4 +268,7 @@ export const seedSettings: AppSettings = {
   dataDir: '',
   githubProxy: '',
   autoOpenFloat: true,
+  ocrHotkey: 'Ctrl+Shift+S',
+  baiduApiKey: '',
+  baiduSecretKey: '',
 }

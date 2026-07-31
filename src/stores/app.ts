@@ -81,6 +81,9 @@ export const useAppStore = defineStore('app', () => {
   baseSettings.customHex = storedTheme.customHex
   // 旧版兼容：无此字段默认 true
   if (baseSettings.autoOpenFloat === undefined) baseSettings.autoOpenFloat = true
+  if (baseSettings.ocrHotkey === undefined) baseSettings.ocrHotkey = 'Ctrl+Shift+S'
+  if (baseSettings.baiduApiKey === undefined) baseSettings.baiduApiKey = ''
+  if (baseSettings.baiduSecretKey === undefined) baseSettings.baiduSecretKey = ''
   const settings = ref<AppSettings>(baseSettings)
 
   const sessionStarted = ref(false)

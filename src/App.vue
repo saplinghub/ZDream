@@ -16,8 +16,11 @@ import { openFloat } from '@/platform/windows'
 import {
   installDoubleShift,
   registerGlobalHotkey,
+  registerGlobalShortcut,
   unregisterGlobalHotkey,
+  unregisterGlobalShortcut,
 } from '@/composables/useGlobalHotkey'
+import { runOcrCapture } from '@/ocr/runner'
 
 const store = useAppStore()
 const route = useRoute()
@@ -53,6 +56,10 @@ onMounted(() => {
   if (!isAuxChrome.value) {
     applyDesktopChrome()
     registerGlobalHotkey(store.settings.hotkey || 'Ctrl+Shift+R')
+    // OCR 截图快捷键
+    registerGlobalShortcut(store.settings.ocrHotkey || 'Ctrl+Shift+S', () => {
+      runOcrCapture()
+    })
     removeDoubleShift = installDoubleShift(() => {
       if (isTauri()) {
         import('@/composables/useGlobalHotkey').then((m) => m.triggerFloatOpen())
@@ -72,6 +79,7 @@ onUnmounted(() => {
   removeDoubleShift?.()
   if (!isAuxChrome.value) {
     unregisterGlobalHotkey(store.settings.hotkey || 'Ctrl+Shift+R')
+    unregisterGlobalShortcut(store.settings.ocrHotkey || 'Ctrl+Shift+S')
   }
 })
 </script>

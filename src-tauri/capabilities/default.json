@@ -34,6 +34,14 @@
     "shell:default",
     "shell:allow-open",
     "shell:allow-execute",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        { "name": "screencapture", "cmd": "screencapture", "args": true },
+        { "name": "powershell", "cmd": "powershell", "args": true }
+      ]
+    },
+    "http:default",
     "global-shortcut:default",
     "global-shortcut:allow-register",
     "global-shortcut:allow-unregister",
