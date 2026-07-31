@@ -79,6 +79,8 @@ export const useAppStore = defineStore('app', () => {
     : structuredClone(seedSettings)
   baseSettings.theme = storedTheme.key
   baseSettings.customHex = storedTheme.customHex
+  // 旧版兼容：无此字段默认 true
+  if (baseSettings.autoOpenFloat === undefined) baseSettings.autoOpenFloat = true
   const settings = ref<AppSettings>(baseSettings)
 
   const sessionStarted = ref(false)

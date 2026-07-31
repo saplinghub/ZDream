@@ -318,6 +318,19 @@ async function onImportNative() {
             截图等资源文件将存于此目录。修改后需重启生效。
           </div>
         </div>
+
+        <div class="field">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input
+              type="checkbox"
+              :checked="store.settings.autoOpenFloat"
+              @change="store.settings.autoOpenFloat = ($event.target as HTMLInputElement).checked"
+              style="width:16px;height:16px;cursor:pointer"
+            />
+            启动时自动打开悬浮球
+          </label>
+        </div>
+
         <div class="row" style="gap: 8px; flex-wrap: wrap">
           <button class="btn btn-secondary btn-sm" type="button" @click="store.exportJson">导出 JSON</button>
           <button class="btn btn-secondary btn-sm" type="button" @click="store.exportCsv">导出 CSV</button>

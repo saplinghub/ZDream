@@ -43,6 +43,10 @@ onMounted(() => {
   // 浮窗/独立窗口路由必须完全透明，不能注入 desktop-host 类
   if (!isAuxChrome.value) {
     applyDesktopChrome()
+    // 启动时自动打开悬浮球
+    if (isTauri() && store.settings.autoOpenFloat) {
+      setTimeout(() => openFloat(), 600)
+    }
   }
 })
 

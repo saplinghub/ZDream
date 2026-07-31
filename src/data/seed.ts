@@ -267,4 +267,5 @@ export const seedSettings: AppSettings = {
   customHex: '#3d9b6e',
   dataDir: '',
   githubProxy: '',
+  autoOpenFloat: true,
 }
