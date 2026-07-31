@@ -11,8 +11,9 @@ const store = useAppStore()
 const activityStore = useActivityStore()
 const collapsed = ref(false)
 
-// ── 点击 vs 拖动（本地坐标追踪，避免异步竞态）──
-let dragStart = { x: 0, y: 0 }
+// ── 点击 vs 拖动（绝对定位：窗口 = 鼠标 - 固定偏移，无累积误差）──
+let dragOffsetX = 0
+let dragOffsetY = 0
 let winPos = { x: 0, y: 0 } // 本地维护窗口物理坐标
 let winPosInit = false
 let moveSeq = 0 // 最新一次移动的序号
@@ -23,47 +24,47 @@ let dragFrame = 0
 
 function onBallDown(e: MouseEvent) {
   if (e.button !== 0) return
-  dragStart = { x: e.screenX, y: e.screenY }
-  isDragging.value = false
   pressing.value = true
+  isDragging.value = false
+  const startMouse = { x: e.screenX, y: e.screenY }
   document.addEventListener('mousemove', onBallMove)
   document.addEventListener('mouseup', onBallUp)
-}
-
-function moveWindowBy(dx: number, dy: number) {
-  // 同步累加本地坐标
-  winPos.x += dx
-  winPos.y += dy
-  const seq = ++moveSeq
+  // 每次按下都读取窗口位置，计算鼠标相对窗口的固定偏移
   import('@tauri-apps/api/webviewWindow').then(async ({ getCurrentWebviewWindow }) => {
-    if (seq !== moveSeq) return // 有更新的移动，跳过本次
     try {
-      const { PhysicalPosition } = await import('@tauri-apps/api/dpi')
-      await getCurrentWebviewWindow().setPosition(new PhysicalPosition(winPos.x, winPos.y))
-    } catch (e) {
-      console.warn('[drag] moveWindowBy failed:', e)
-    }
+      const pos = await getCurrentWebviewWindow().outerPosition()
+      winPos = { x: pos.x, y: pos.y }
+      winPosInit = true
+      dragOffsetX = startMouse.x - winPos.x
+      dragOffsetY = startMouse.y - winPos.y
+    } catch { /* ignore */ }
   })
 }
 
 function onBallMove(e: MouseEvent) {
-  const dx = e.screenX - dragStart.x
-  const dy = e.screenY - dragStart.y
-  // 同步判定拖拽
-  if (!isDragging.value && Math.abs(dx) + Math.abs(dy) >= DRAG_THRESHOLD) {
+  if (!winPosInit) return
+  // 阈值判定：鼠标相对按下点的位移
+  if (!isDragging.value) {
+    const movedX = e.screenX - (dragOffsetX + winPos.x)
+    const movedY = e.screenY - (dragOffsetY + winPos.y)
+    if (Math.abs(movedX) + Math.abs(movedY) < DRAG_THRESHOLD) return
     isDragging.value = true
     pressing.value = false
   }
-  if (isDragging.value) {
-    // 拖动中：增量移动窗口
-    if (e.timeStamp - dragFrame > 16) { // 限频 ~60fps
-      dragFrame = e.timeStamp
-      // 位置未初始化则先跳过本次移动，等待 onBallDown 的读取
-      if (winPosInit) {
-        moveWindowBy(dx, dy)
-        dragStart = { x: e.screenX, y: e.screenY }
-      }
-    }
+  // 绝对定位：窗口新位置 = 鼠标当前位置 - 固定偏移
+  if (e.timeStamp - dragFrame > 8) { // 限频 ~120fps
+    dragFrame = e.timeStamp
+    const newX = e.screenX - dragOffsetX
+    const newY = e.screenY - dragOffsetY
+    winPos = { x: newX, y: newY }
+    const seq = ++moveSeq
+    import('@tauri-apps/api/webviewWindow').then(async ({ getCurrentWebviewWindow }) => {
+      if (seq !== moveSeq) return // 有更新的移动，跳过本次
+      try {
+        const { PhysicalPosition } = await import('@tauri-apps/api/dpi')
+        await getCurrentWebviewWindow().setPosition(new PhysicalPosition(newX, newY))
+      } catch { /* ignore */ }
+    })
   }
 }
 
