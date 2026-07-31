@@ -11,11 +11,12 @@ const store = useAppStore()
 const activityStore = useActivityStore()
 const collapsed = ref(false)
 
-// ── 点击 vs 拖动 ──
+// ── 点击 vs 拖动（手动位移，参考 ZTools）──
 let dragStart = { x: 0, y: 0 }
 const isDragging = ref(false)
 const pressing = ref(false)
 const DRAG_THRESHOLD = 5
+let dragFrame = 0
 
 function onBallDown(e: MouseEvent) {
   if (e.button !== 0) return
@@ -26,15 +27,30 @@ function onBallDown(e: MouseEvent) {
   document.addEventListener('mouseup', onBallUp)
 }
 
+async function moveWindowBy(dx: number, dy: number) {
+  try {
+    const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow')
+    const win = getCurrentWebviewWindow()
+    const pos = await win.outerPosition()
+    win.setPosition({ x: pos.x + dx, y: pos.y + dy } as any)
+  } catch { /* ignore */ }
+}
+
 function onBallMove(e: MouseEvent) {
   const dx = e.screenX - dragStart.x
   const dy = e.screenY - dragStart.y
-  if (!isDragging.value && Math.sqrt(dx * dx + dy * dy) >= DRAG_THRESHOLD) {
+  // 同步判定拖拽（不再依赖异步 startDragging）
+  if (!isDragging.value && Math.abs(dx) + Math.abs(dy) >= DRAG_THRESHOLD) {
     isDragging.value = true
     pressing.value = false
-    import('@tauri-apps/api/webviewWindow').then(({ getCurrentWebviewWindow }) => {
-      getCurrentWebviewWindow().startDragging()
-    })
+  }
+  if (isDragging.value) {
+    // 拖动中：增量移动窗口
+    if (e.timeStamp - dragFrame > 16) { // 限频 ~60fps
+      dragFrame = e.timeStamp
+      moveWindowBy(dx, dy)
+      dragStart = { x: e.screenX, y: e.screenY }
+    }
   }
 }
 
@@ -44,8 +60,30 @@ function onBallUp(_e: MouseEvent) {
   pressing.value = false
   if (!isDragging.value) {
     toggleCollapse()
+  } else {
+    saveBallPos()
   }
   isDragging.value = false
+}
+
+const BALL_POS_KEY = 'mhxy-zdream:float-pos'
+
+async function saveBallPos() {
+  try {
+    const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow')
+    const pos = await getCurrentWebviewWindow().outerPosition()
+    localStorage.setItem(BALL_POS_KEY, JSON.stringify({ x: pos.x, y: pos.y }))
+  } catch { /* ignore */ }
+}
+
+async function restoreBallPos() {
+  try {
+    const raw = localStorage.getItem(BALL_POS_KEY)
+    if (!raw) return
+    const { x, y } = JSON.parse(raw)
+    const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow')
+    await getCurrentWebviewWindow().setPosition({ x, y } as any)
+  } catch { /* ignore */ }
 }
 
 const events = computed(() => store.events.slice(0, 30))
@@ -96,6 +134,7 @@ let unlistenOpen: (() => void) | null = null
 
 onMounted(async () => {
   forceTransparent()
+  restoreBallPos()
   window.addEventListener('focus', onWindowFocus)
   window.addEventListener('blur', onBlur)
   // 主窗口热键触发时收到通知 → 展开 + 聚焦
