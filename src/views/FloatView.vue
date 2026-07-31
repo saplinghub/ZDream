@@ -20,6 +20,7 @@ let dragFrame = 0
 
 function onBallDown(e: MouseEvent) {
   if (e.button !== 0) return
+  console.info('[drag] mousedown', e.screenX, e.screenY)
   dragStart = { x: e.screenX, y: e.screenY }
   isDragging.value = false
   pressing.value = true
@@ -30,10 +31,13 @@ function onBallDown(e: MouseEvent) {
 async function moveWindowBy(dx: number, dy: number) {
   try {
     const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow')
+    const { PhysicalPosition } = await import('@tauri-apps/api/dpi')
     const win = getCurrentWebviewWindow()
     const pos = await win.outerPosition()
-    win.setPosition({ x: pos.x + dx, y: pos.y + dy } as any)
-  } catch { /* ignore */ }
+    await win.setPosition(new PhysicalPosition(pos.x + dx, pos.y + dy))
+  } catch (e) {
+    console.warn('[drag] moveWindowBy failed:', e)
+  }
 }
 
 function onBallMove(e: MouseEvent) {
@@ -41,12 +45,13 @@ function onBallMove(e: MouseEvent) {
   const dy = e.screenY - dragStart.y
   // 同步判定拖拽（不再依赖异步 startDragging）
   if (!isDragging.value && Math.abs(dx) + Math.abs(dy) >= DRAG_THRESHOLD) {
+    console.info('[drag] threshold hit, isDragging = true')
     isDragging.value = true
     pressing.value = false
   }
   if (isDragging.value) {
     // 拖动中：增量移动窗口
-    if (e.timeStamp - dragFrame > 16) { // 限频 ~60fps
+    if (e.timeStamp - dragFrame > 16) {
       dragFrame = e.timeStamp
       moveWindowBy(dx, dy)
       dragStart = { x: e.screenX, y: e.screenY }
@@ -59,8 +64,10 @@ function onBallUp(_e: MouseEvent) {
   document.removeEventListener('mouseup', onBallUp)
   pressing.value = false
   if (!isDragging.value) {
+    console.info('[drag] click (no drag), toggle')
     toggleCollapse()
   } else {
+    console.info('[drag] drag end, save pos')
     saveBallPos()
   }
   isDragging.value = false
