@@ -84,6 +84,7 @@ export const useAppStore = defineStore('app', () => {
   if (baseSettings.ocrHotkey === undefined) baseSettings.ocrHotkey = 'Ctrl+Shift+S'
   if (baseSettings.baiduApiKey === undefined) baseSettings.baiduApiKey = ''
   if (baseSettings.baiduSecretKey === undefined) baseSettings.baiduSecretKey = ''
+  if (baseSettings.logLevel === undefined) baseSettings.logLevel = 'info'
   const settings = ref<AppSettings>(baseSettings)
 
   const sessionStarted = ref(false)

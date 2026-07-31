@@ -8,11 +8,13 @@ import ListModal from '@/components/modals/ListModal.vue'
 import SoldModal from '@/components/modals/SoldModal.vue'
 import BuyModal from '@/components/modals/BuyModal.vue'
 import EditRecordModal from '@/components/modals/EditRecordModal.vue'
+import RegionSelector from '@/components/modals/RegionSelector.vue'
 import QuickFloat from '@/components/modals/QuickFloat.vue'
 import AppToast from '@/components/ui/AppToast.vue'
 import { useAppStore } from '@/stores/app'
 import { applyDesktopChrome, isTauri } from '@/platform/desktop'
 import { openFloat } from '@/platform/windows'
+import { setLogLevel } from '@/utils/logger'
 import {
   installDoubleShift,
   registerGlobalHotkey,
@@ -36,6 +38,10 @@ function onKey(e: KeyboardEvent) {
     store.showQuickDock = false
   }
 }
+
+// 日志级别生效
+setLogLevel(store.settings.logLevel)
+watch(() => store.settings.logLevel, (lv) => setLogLevel(lv))
 
 let removeDoubleShift: (() => void) | null = null
 
@@ -100,5 +106,7 @@ onUnmounted(() => {
     <!-- 浏览器降级：旧版快捷记账浮层 -->
     <QuickFloat />
     <AppToast />
+    <!-- OCR 选区遮罩 -->
+    <RegionSelector />
   </template>
 </template>

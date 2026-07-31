@@ -8,6 +8,10 @@ export const useOcrStore = defineStore('ocr', () => {
   const error = ref('')
   const lastTime = ref<number | null>(null)
 
+  /** 选区模式：全屏截图 base64，等待用户框选 */
+  const selecting = ref(false)
+  const screenshot = ref('') // data:image/png;base64,...
+
   function setRunning(v: boolean) {
     capturing.value = v
   }
@@ -24,15 +28,27 @@ export const useOcrStore = defineStore('ocr', () => {
     result.value = null
     error.value = ''
   }
+  function startSelecting(b64: string) {
+    screenshot.value = b64
+    selecting.value = true
+  }
+  function cancelSelecting() {
+    selecting.value = false
+    screenshot.value = ''
+  }
 
   return {
     capturing,
     result,
     error,
     lastTime,
+    selecting,
+    screenshot,
     setRunning,
     setResult,
     setError,
     clear,
+    startSelecting,
+    cancelSelecting,
   }
 })

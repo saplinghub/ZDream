@@ -111,6 +111,8 @@ export interface AppSettings {
   baiduApiKey: string
   /** 百度 OCR Secret Key */
   baiduSecretKey: string
+  /** 日志记录级别 */
+  logLevel: 'debug' | 'info' | 'warn' | 'error'
 }
 
 /** 在线会话记录 */

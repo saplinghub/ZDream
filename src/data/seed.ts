@@ -271,4 +271,5 @@ export const seedSettings: AppSettings = {
   ocrHotkey: 'Ctrl+Shift+S',
   baiduApiKey: '',
   baiduSecretKey: '',
+  logLevel: 'info',
 }

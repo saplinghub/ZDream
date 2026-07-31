@@ -6139,7 +6139,7 @@ dependencies = [
 
 [[package]]
 name = "zdream"
-version = "0.1.14"
+version = "0.1.16"
 dependencies = [
  "objc2",
  "serde",
