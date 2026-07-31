@@ -129,11 +129,6 @@ function forceTransparent() {
 // 模块加载时立即执行（早于 onMounted）
 forceTransparent()
 
-function onWindowFocus() {
-  // 唤出时自动展开并聚焦输入框
-  expandAndFocus()
-}
-
 async function expandAndFocus() {
   if (transitioning.value) return
   if (collapsed.value) {
@@ -160,9 +155,9 @@ onMounted(async () => {
       } catch { /* ignore */ }
     })
   }
-  window.addEventListener('focus', onWindowFocus)
+  // 注意：不能监听 window.focus —— 用户点击小球聚焦时会误触发展开，导致无法拖拽
   window.addEventListener('blur', onBlur)
-  // 主窗口热键触发时收到通知 → 展开 + 聚焦
+  // 主窗口热键触发时收到通知 → 展开 + 聚焦（仅快捷键路径）
   if (isTauri()) {
     try {
       const { listen } = await import('@tauri-apps/api/event')
@@ -183,7 +178,6 @@ onMounted(async () => {
   }
 })
 onUnmounted(() => {
-  window.removeEventListener('focus', onWindowFocus)
   window.removeEventListener('blur', onBlur)
   unlistenOpen?.()
 })
