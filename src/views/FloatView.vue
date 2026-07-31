@@ -110,9 +110,10 @@ async function setSize(w: number, h: number) {
 async function getWinLogicalPos(): Promise<{ x: number; y: number; scale: number }> {
   try {
     const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow')
+    const { currentMonitor } = await import('@tauri-apps/api/window')
     const [physical, monitor] = await Promise.all([
       getCurrentWebviewWindow().outerPosition(),
-      getCurrentWebviewWindow().currentMonitor(),
+      currentMonitor(),
     ])
     const scale = monitor?.scaleFactor ?? 1
     return { x: physical.x / scale, y: physical.y / scale, scale }
