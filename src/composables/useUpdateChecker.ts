@@ -98,13 +98,19 @@ export function useUpdateChecker() {
 
   async function check(proxy = ''): Promise<UpdateInfo | null> {
     status.value = { checking: true, error: '', info: null }
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 15000) // 15s 超时
     try {
       const current = await getCurrentVersion()
       const apiUrl = proxyUrl(GITHUB_API, proxy)
-      const res = await fetch(apiUrl, { headers: { Accept: 'application/vnd.github+json' } })
+      console.info('[update] check', apiUrl)
+      const res = await fetch(apiUrl, {
+        headers: { Accept: 'application/vnd.github+json' },
+        signal: ctrl.signal,
+      })
       if (!res.ok) {
         if (res.status === 403) {
-          status.value = { checking: false, error: 'GitHub API 限流，请稍后重试', info: null }
+          status.value = { checking: false, error: 'GitHub API 限流（未认证 60次/小时），请稍后重试或配置加速代理', info: null }
           return null
         }
         throw new Error(`HTTP ${res.status}`)
@@ -127,11 +133,18 @@ export function useUpdateChecker() {
         assets, myAssets, best,
       }
       status.value = { checking: false, error: '', info }
+      console.info('[update] done, latest =', info.latestVersion, 'assets =', assets.length)
       return info
     } catch (e) {
       const msg = e instanceof Error ? e.message : '未知错误'
-      status.value = { checking: false, error: `检查更新失败：${msg}`, info: null }
+      const hint = msg.includes('abort') || msg.includes('Abort')
+        ? '（超时）请检查网络或配置加速代理'
+        : '（可能网络不通或 GitHub 无法访问）'
+      status.value = { checking: false, error: `检查更新失败：${msg} ${hint}`, info: null }
+      console.warn('[update] check failed:', e)
       return null
+    } finally {
+      clearTimeout(timer)
     }
   }
 
@@ -199,23 +212,27 @@ export function useUpdateChecker() {
       })
 
       const merged = new Uint8Array(data)
+      console.info('[update] downloaded bytes =', merged.length)
 
       // Tauri → 写 Downloads
       try {
         const { writeFile } = await import('@tauri-apps/plugin-fs')
         const { join, downloadDir } = await import('@tauri-apps/api/path')
         const path = await join(await downloadDir(), fileName)
+        console.info('[update] writing to', path)
         await writeFile(path, merged)
+        console.info('[update] write ok')
         download.value = { downloading: false, progress: 100, fileName, savedPath: path, error: '' }
         return path
-      } catch {
+      } catch (writeErr) {
+        console.warn('[update] writeFile failed, fallback to browser download:', writeErr)
         // 浏览器降级
         const blob = new Blob([merged], { type: 'application/octet-stream' })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url; a.download = fileName; a.click()
         URL.revokeObjectURL(url)
-        download.value = { downloading: false, progress: 100, fileName, savedPath: '(浏览器下载)', error: '' }
+        download.value = { downloading: false, progress: 100, fileName, savedPath: '(浏览器下载)', error: `写入目录失败：${writeErr instanceof Error ? writeErr.message : String(writeErr)}` }
         return null
       }
     } catch (e) {

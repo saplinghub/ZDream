@@ -23,6 +23,14 @@
     "dialog:default",
     "fs:default",
     "fs:allow-write",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        { "path": "$DOWNLOAD/**" },
+        { "path": "$APPDATA/**" },
+        { "path": "$HOME/**" }
+      ]
+    },
     "shell:default",
     "shell:allow-open",
     "shell:allow-execute",
