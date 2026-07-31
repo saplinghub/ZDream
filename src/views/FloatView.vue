@@ -179,6 +179,8 @@ async function toggleCollapse() {
   }
 }
 
+</script>
+
 <template>
   <Transition name="float" mode="out-in">
     <!-- 收起态：纯透明悬浮球 -->
