@@ -14,13 +14,16 @@ function floatUrl(hashPath: string): string {
 // ── 统一悬浮窗 ──
 export async function openFloat(): Promise<void> {
   if (!isTauri()) return
-  const { WebviewWindow, getAllWebviewWindows } = await import('@tauri-apps/api/webviewWindow')
+  const { getAllWebviewWindows } = await import('@tauri-apps/api/webviewWindow')
   const all = await getAllWebviewWindows()
   const existing = all.find((w) => w.label === FLOAT_WINDOW)
   if (existing) {
     await existing.show()
+    await existing.setFocus()
     return
   }
+  // fallback: Rust 未预创建则动态创建
+  const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow')
   const w = new WebviewWindow(FLOAT_WINDOW, {
     url: floatUrl('/float'),
     title: '梦金囊',
@@ -35,7 +38,6 @@ export async function openFloat(): Promise<void> {
     alwaysOnTop: true,
     skipTaskbar: true,
     visible: true,
-    focus: false,
   })
   await new Promise<void>((resolve, reject) => {
     w.once('tauri://created', () => resolve())

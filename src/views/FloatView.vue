@@ -27,16 +27,11 @@ function onBallDown(e: MouseEvent) {
 function onBallMove(e: MouseEvent) {
   const dx = e.screenX - dragStart.x
   const dy = e.screenY - dragStart.y
-  if (!isDragging.value && Math.abs(dx) + Math.abs(dy) >= DRAG_THRESHOLD) {
+  if (!isDragging.value && Math.sqrt(dx * dx + dy * dy) >= DRAG_THRESHOLD) {
     isDragging.value = true
     pressing.value = false
-  }
-  if (isDragging.value) {
-    import('@tauri-apps/api/webviewWindow').then(async ({ getCurrentWebviewWindow }) => {
-      const win = getCurrentWebviewWindow()
-      const pos = await win.outerPosition()
-      win.setPosition({ x: pos.x + (e.screenX - dragStart.x), y: pos.y + (e.screenY - dragStart.y) } as any)
-      dragStart = { x: e.screenX, y: e.screenY }
+    import('@tauri-apps/api/webviewWindow').then(({ getCurrentWebviewWindow }) => {
+      getCurrentWebviewWindow().startDragging()
     })
   }
 }

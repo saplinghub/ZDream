@@ -1,5 +1,8 @@
 use tauri_plugin_sql::{Migration, MigrationKind};
 
+#[cfg(target_os = "macos")]
+use tauri::{Manager, WebviewUrl};
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let migrations = vec![Migration {
@@ -17,6 +20,37 @@ pub fn run() {
                 .add_migrations("sqlite:zdream.db", migrations)
                 .build(),
         )
+        .setup(|app| {
+            // Float 窗口预创建，macOS 设为非激活面板
+            #[cfg(target_os = "macos")]
+            {
+                let win = tauri::WebviewWindowBuilder::new(
+                    app,
+                    "float",
+                    WebviewUrl::App("/#/float".into()),
+                )
+                .title("梦金囊")
+                .inner_size(360.0, 500.0)
+                .min_inner_size(48.0, 48.0)
+                .resizable(false)
+                .decorations(false)
+                .transparent(true)
+                .always_on_top(true)
+                .skip_taskbar(true)
+                .visible(false)
+                .build()?;
+
+                // 设为 NSNonactivatingPanelMask：点击不激活应用
+                let ns_win = win.ns_window().expect("failed to get NSWindow") as *mut objc2::runtime::Object;
+                unsafe {
+                    use objc2::{msg_send, sel};
+                    let current_mask: u64 = msg_send![ns_win, styleMask];
+                    // NSNonactivatingPanelMask = 1 << 7 = 128
+                    let _: () = msg_send![ns_win, setStyleMask: current_mask | 128u64];
+                }
+            }
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
