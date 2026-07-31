@@ -11,8 +11,11 @@ const store = useAppStore()
 const activityStore = useActivityStore()
 const collapsed = ref(false)
 
-// ── 点击 vs 拖动（手动位移，参考 ZTools）──
+// ── 点击 vs 拖动（本地坐标追踪，避免异步竞态）──
 let dragStart = { x: 0, y: 0 }
+let winPos = { x: 0, y: 0 } // 本地维护窗口物理坐标
+let winPosInit = false
+let moveSeq = 0 // 最新一次移动的序号
 const isDragging = ref(false)
 const pressing = ref(false)
 const DRAG_THRESHOLD = 5
@@ -20,41 +23,55 @@ let dragFrame = 0
 
 function onBallDown(e: MouseEvent) {
   if (e.button !== 0) return
-  console.info('[drag] mousedown', e.screenX, e.screenY)
   dragStart = { x: e.screenX, y: e.screenY }
   isDragging.value = false
   pressing.value = true
+  winPosInit = false
+  // 按下时读取一次窗口位置
+  import('@tauri-apps/api/webviewWindow').then(async ({ getCurrentWebviewWindow }) => {
+    try {
+      const pos = await getCurrentWebviewWindow().outerPosition()
+      winPos = { x: pos.x, y: pos.y }
+      winPosInit = true
+    } catch { /* ignore */ }
+  })
   document.addEventListener('mousemove', onBallMove)
   document.addEventListener('mouseup', onBallUp)
 }
 
-async function moveWindowBy(dx: number, dy: number) {
-  try {
-    const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow')
-    const { PhysicalPosition } = await import('@tauri-apps/api/dpi')
-    const win = getCurrentWebviewWindow()
-    const pos = await win.outerPosition()
-    await win.setPosition(new PhysicalPosition(pos.x + dx, pos.y + dy))
-  } catch (e) {
-    console.warn('[drag] moveWindowBy failed:', e)
-  }
+function moveWindowBy(dx: number, dy: number) {
+  // 同步累加本地坐标
+  winPos.x += dx
+  winPos.y += dy
+  const seq = ++moveSeq
+  import('@tauri-apps/api/webviewWindow').then(async ({ getCurrentWebviewWindow }) => {
+    if (seq !== moveSeq) return // 有更新的移动，跳过本次
+    try {
+      const { PhysicalPosition } = await import('@tauri-apps/api/dpi')
+      await getCurrentWebviewWindow().setPosition(new PhysicalPosition(winPos.x, winPos.y))
+    } catch (e) {
+      console.warn('[drag] moveWindowBy failed:', e)
+    }
+  })
 }
 
 function onBallMove(e: MouseEvent) {
   const dx = e.screenX - dragStart.x
   const dy = e.screenY - dragStart.y
-  // 同步判定拖拽（不再依赖异步 startDragging）
+  // 同步判定拖拽
   if (!isDragging.value && Math.abs(dx) + Math.abs(dy) >= DRAG_THRESHOLD) {
-    console.info('[drag] threshold hit, isDragging = true')
     isDragging.value = true
     pressing.value = false
   }
   if (isDragging.value) {
     // 拖动中：增量移动窗口
-    if (e.timeStamp - dragFrame > 16) {
+    if (e.timeStamp - dragFrame > 16) { // 限频 ~60fps
       dragFrame = e.timeStamp
-      moveWindowBy(dx, dy)
-      dragStart = { x: e.screenX, y: e.screenY }
+      // 位置未初始化则先跳过本次移动，等待 onBallDown 的读取
+      if (winPosInit) {
+        moveWindowBy(dx, dy)
+        dragStart = { x: e.screenX, y: e.screenY }
+      }
     }
   }
 }
