@@ -13,11 +13,14 @@ import AppToast from '@/components/ui/AppToast.vue'
 import { useAppStore } from '@/stores/app'
 import { applyDesktopChrome, isTauri } from '@/platform/desktop'
 import { openFloat } from '@/platform/windows'
-import { useGlobalHotkey } from '@/composables/useGlobalHotkey'
+import {
+  installDoubleShift,
+  registerGlobalHotkey,
+  unregisterGlobalHotkey,
+} from '@/composables/useGlobalHotkey'
 
 const store = useAppStore()
 const route = useRoute()
-const hotkey = useGlobalHotkey()
 
 const isAuxChrome = computed(() => {
   const c = route.meta?.chrome
@@ -31,17 +34,32 @@ function onKey(e: KeyboardEvent) {
   }
 }
 
+let removeDoubleShift: (() => void) | null = null
+
 // 快捷键变更时重新注册
-watch(() => store.settings.hotkey, (newKey) => {
-  if (!isAuxChrome.value) hotkey.register(newKey)
+watch(() => store.settings.hotkey, (newKey, oldKey) => {
+  if (isAuxChrome.value) return
+  if (oldKey && oldKey !== newKey) {
+    unregisterGlobalHotkey(oldKey)
+  }
+  if (newKey) {
+    registerGlobalHotkey(newKey)
+  }
 })
 
 onMounted(() => {
   window.addEventListener('keydown', onKey)
+  // 只有主窗口注册全局快捷键 + 双击 Shift
   if (!isAuxChrome.value) {
     applyDesktopChrome()
-    // 全局快捷键注册
-    hotkey.register(store.settings.hotkey)
+    registerGlobalHotkey(store.settings.hotkey || 'Ctrl+Shift+R')
+    removeDoubleShift = installDoubleShift(() => {
+      if (isTauri()) {
+        import('@/composables/useGlobalHotkey').then((m) => m.triggerFloatOpen())
+      } else {
+        store.showFloatWin = !store.showFloatWin
+      }
+    })
     // 启动时自动打开悬浮球
     if (isTauri() && store.settings.autoOpenFloat) {
       setTimeout(() => openFloat(), 600)
@@ -51,7 +69,10 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', onKey)
-  hotkey.unregisterAll()
+  removeDoubleShift?.()
+  if (!isAuxChrome.value) {
+    unregisterGlobalHotkey(store.settings.hotkey || 'Ctrl+Shift+R')
+  }
 })
 </script>
 

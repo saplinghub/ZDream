@@ -5,6 +5,7 @@ import { useActivityStore } from '@/stores/activity'
 import { fmtTimeShort } from '@/utils/format'
 import { getActivity } from '@/activities/registry'
 import { showMainWindow } from '@/platform/windows'
+import { isTauri } from '@/platform/desktop'
 
 const store = useAppStore()
 const activityStore = useActivityStore()
@@ -77,20 +78,38 @@ forceTransparent()
 
 function onWindowFocus() {
   // 唤出时自动展开并聚焦输入框
-  if (collapsed.value && !transitioning.value) {
-    toggleCollapse()
-  } else if (!collapsed.value) {
-    setTimeout(() => {
-      const el = document.querySelector<HTMLInputElement>('.f-item-input')
-      el?.focus()
-    }, 400)
-  }
+  expandAndFocus()
 }
 
-onMounted(() => {
+async function expandAndFocus() {
+  if (transitioning.value) return
+  if (collapsed.value) {
+    await toggleCollapse()
+  }
+  setTimeout(() => {
+    const el = document.querySelector<HTMLInputElement>('.f-item-input')
+    el?.focus()
+  }, 400)
+}
+
+let unlistenOpen: (() => void) | null = null
+
+onMounted(async () => {
   forceTransparent()
   window.addEventListener('focus', onWindowFocus)
   window.addEventListener('blur', onBlur)
+  // 主窗口热键触发时收到通知 → 展开 + 聚焦
+  if (isTauri()) {
+    try {
+      const { listen } = await import('@tauri-apps/api/event')
+      unlistenOpen = await listen('float:open-request', () => {
+        console.info('[FloatView] float:open-request received')
+        expandAndFocus()
+      })
+    } catch (e) {
+      console.warn('[FloatView] listen float:open-request failed:', e)
+    }
+  }
   // 首次打开时聚焦输入框
   if (!collapsed.value) {
     setTimeout(() => {
@@ -102,6 +121,7 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('focus', onWindowFocus)
   window.removeEventListener('blur', onBlur)
+  unlistenOpen?.()
 })
 
 async function onBlur() {
