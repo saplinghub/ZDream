@@ -83,16 +83,17 @@ onUnmounted(() => window.removeEventListener('blur', onBlur))
 
 async function onBlur() {
   if (collapsed.value || transitioning.value) return
-  const pos = await getWinPos()
-  const anchorX = pos.x + ANCHOR_X
-  const anchorY = pos.y + ANCHOR_Y
+  const { x: lx, y: ly, scale } = await getWinLogicalPos()
+  const anchorX = lx + ANCHOR_X
+  const anchorY = ly + ANCHOR_Y
   const newX = Math.max(0, anchorX - BALL_CX)
   const newY = Math.max(0, anchorY - BALL_CY)
   transitioning.value = true
   resizing.value = true
   collapsed.value = true
   await new Promise(r => setTimeout(r, 250))
-  await Promise.all([setWinPos(newX, newY), setSize(48, 48)])
+  await setWinLogicalPos(newX, newY, scale)
+  await setSize(48, 48)
   await new Promise(r => setTimeout(r, 100))
   resizing.value = false
   await new Promise(r => setTimeout(r, 350))
@@ -107,20 +108,24 @@ async function setSize(w: number, h: number) {
   } catch { /* ignore */ }
 }
 
-async function getWinPos(): Promise<{ x: number; y: number }> {
+async function getWinLogicalPos(): Promise<{ x: number; y: number; scale: number }> {
   try {
     const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow')
-    const p = await getCurrentWebviewWindow().outerPosition()
-    return { x: p.x, y: p.y }
+    const [physical, monitor] = await Promise.all([
+      getCurrentWebviewWindow().outerPosition(),
+      getCurrentWebviewWindow().currentMonitor(),
+    ])
+    const scale = monitor?.scaleFactor ?? 1
+    return { x: physical.x / scale, y: physical.y / scale, scale }
   } catch {
-    return { x: 0, y: 0 }
+    return { x: 0, y: 0, scale: 1 }
   }
 }
 
-async function setWinPos(x: number, y: number) {
+async function setWinLogicalPos(logicalX: number, logicalY: number, scale: number) {
   try {
     const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow')
-    await getCurrentWebviewWindow().setPosition({ x, y } as any)
+    await getCurrentWebviewWindow().setPosition({ x: Math.round(logicalX * scale), y: Math.round(logicalY * scale) } as any)
   } catch { /* ignore */ }
 }
 
@@ -139,17 +144,17 @@ const resizing = ref(false) // 窗口缩放中，隐藏球避免漂移
 
 async function toggleCollapse() {
   if (transitioning.value) return
-  const pos = await getWinPos()
+  const { x: lx, y: ly, scale } = await getWinLogicalPos()
   transitioning.value = true
 
   if (collapsed.value) {
-    // ── 展开：先挪窗 + 调大小（球保持居中不漂），再切 DOM ──
-    const anchorX = pos.x + BALL_CX
-    const anchorY = pos.y + BALL_CY
+    // ── 展开：锚点 = 小球中心（逻辑坐标），面板中心对齐球心 ──
+    const anchorX = lx + BALL_CX
+    const anchorY = ly + BALL_CY
     const newX = Math.max(0, anchorX - ANCHOR_X)
     const newY = Math.max(0, anchorY - ANCHOR_Y)
     resizing.value = true
-    await setWinPos(newX, newY)
+    await setWinLogicalPos(newX, newY, scale)
     await setSize(PANEL_W, PANEL_H)
     resizing.value = false
     collapsed.value = false
@@ -158,15 +163,16 @@ async function toggleCollapse() {
     const el = document.querySelector<HTMLInputElement>('.f-item-input')
     el?.focus()
   } else {
-    // ── 收起：先隐藏球 → 切 DOM → 挪窗+缩窗 → 显示球 ──
+    // ── 收起：锚点 = 面板中心（逻辑坐标），球心对齐面板中心 ──
     resizing.value = true
     collapsed.value = true
     await new Promise(r => setTimeout(r, 250))
-    const anchorX = pos.x + ANCHOR_X
-    const anchorY = pos.y + ANCHOR_Y
+    const anchorX = lx + ANCHOR_X
+    const anchorY = ly + ANCHOR_Y
     const newX = Math.max(0, anchorX - BALL_CX)
     const newY = Math.max(0, anchorY - BALL_CY)
-    await Promise.all([setWinPos(newX, newY), setSize(48, 48)])
+    await setWinLogicalPos(newX, newY, scale)
+    await setSize(48, 48)
     await new Promise(r => setTimeout(r, 100))
     resizing.value = false
     await new Promise(r => setTimeout(r, 350))
