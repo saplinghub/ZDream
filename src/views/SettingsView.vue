@@ -306,8 +306,16 @@ async function onImportNative() {
       <div class="card settings-block stack" style="grid-column: 1 / -1">
         <h3>数据与快捷键</h3>
         <div class="field">
-          <label>窗内快捷记账</label>
-          <input class="input" value="Ctrl+Shift+R" readonly />
+          <label>全局唤出悬浮窗快捷键</label>
+          <input
+            v-model="store.settings.hotkey"
+            class="input"
+            placeholder="Ctrl+Shift+R"
+            style="max-width:220px"
+          />
+          <div class="meta" style="font-size:11px;margin-top:4px">
+            支持 Ctrl / Alt / Shift / Super + 字母组合。另外，双击 Shift 键也可唤出（应用聚焦时）
+          </div>
         </div>
         <div class="field" style="margin-bottom: 10px">
           <label>数据存储目录（空白则使用默认 AppData 目录）</label>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
 import OnlineModal from '@/components/modals/OnlineModal.vue'
@@ -30,6 +30,11 @@ function onKey(e: KeyboardEvent) {
     store.showQuickDock = false
   }
 }
+
+// 快捷键变更时重新注册
+watch(() => store.settings.hotkey, (newKey) => {
+  if (!isAuxChrome.value) hotkey.register(newKey)
+})
 
 onMounted(() => {
   window.addEventListener('keydown', onKey)
