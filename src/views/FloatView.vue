@@ -4,6 +4,7 @@ import { useAppStore } from '@/stores/app'
 import { useActivityStore } from '@/stores/activity'
 import { fmtTimeShort } from '@/utils/format'
 import { getActivity } from '@/activities/registry'
+import { showMainWindow } from '@/platform/windows'
 
 const store = useAppStore()
 const activityStore = useActivityStore()
@@ -41,6 +42,7 @@ function onBallUp(_e: MouseEvent) {
   document.removeEventListener('mouseup', onBallUp)
   pressing.value = false
   if (!isDragging.value) {
+    showMainWindow()
     toggleCollapse()
   }
   isDragging.value = false
@@ -199,9 +201,14 @@ async function toggleCollapse() {
     <div v-else key="panel" class="panel">
       <div class="p-head" data-tauri-drag-region>
         <span class="p-title">{{ activityStore.current?.name || '梦金囊' }}</span>
-        <button class="p-btn" @click="toggleCollapse" title="收成小球">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="8 12 12 8 16 12"/><line x1="12" y1="16" x2="12" y2="8"/></svg>
-        </button>
+        <div style="display:flex;align-items:center;gap:6px">
+          <button class="p-btn-main" @click="showMainWindow" title="打开主窗口">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+          </button>
+          <button class="p-btn" @click="toggleCollapse" title="收成小球">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="8 12 12 8 16 12"/><line x1="12" y1="16" x2="12" y2="8"/></svg>
+          </button>
+        </div>
       </div>
 
       <!-- 动态活动内容 -->
@@ -281,6 +288,22 @@ html, body, #app {
   transform: rotate(180deg);
 }
 .p-btn svg { width: 12px; height: 12px; }
+.p-btn-main {
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+.p-btn-main:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in oklch, var(--accent) 10%, transparent);
+}
+.p-btn-main svg { width: 12px; height: 12px; }
 
 .p-accts {
   display: flex; gap: 5px; padding: 6px 10px; flex-wrap: wrap; align-items: center;

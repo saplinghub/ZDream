@@ -16,4 +16,5 @@ export {
   openFloat,
   closeFloat,
   focusMainWindow,
+  showMainWindow,
 } from '@/platform/windows'

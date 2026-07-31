@@ -73,3 +73,8 @@ export async function focusMainWindow(): Promise<void> {
     await main.setFocus()
   }
 }
+
+/** 恢复主窗口（被关了或隐藏了都尝试恢复） */
+export async function showMainWindow(): Promise<void> {
+  await focusMainWindow()
+}
