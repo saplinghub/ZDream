@@ -1,46 +1,18 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { THEMES } from '@/theme/themes'
 import type { ItemCategory } from '@/types'
-import { openTextFile, saveTextFile } from '@/platform/desktop'
+import { openTextFile } from '@/platform/desktop'
 import { useUpdateChecker } from '@/composables/useUpdateChecker'
 import { useOcrStore } from '@/stores/ocr'
 import { runOcrCapture } from '@/ocr/runner'
-import { getAllLogs, getLogsByLevel, clearLogs, exportLogsText } from '@/utils/logger'
 
 const store = useAppStore()
 const ocr = useOcrStore()
 
 function runOcr() {
   runOcrCapture()
-}
-
-// ── 日志查看 ──
-const logFilter = ref<'all' | 'debug' | 'info' | 'warn' | 'error'>('all')
-const logRefresh = ref(0)
-
-const logList = computed(() => {
-  void logRefresh.value // 依赖刷新标记
-  return logFilter.value === 'all' ? getAllLogs() : getLogsByLevel(logFilter.value)
-})
-
-function logTime(ms: number) {
-  const d = new Date(ms)
-  return d.toLocaleTimeString('zh-CN', { hour12: false })
-}
-
-function logColor(lv: string): string {
-  return { debug: '#888', info: '#3b82f6', warn: '#eab308', error: '#ef4444' }[lv] || '#888'
-}
-
-async function logExport() {
-  await saveTextFile('zdream-logs.txt', exportLogsText(), 'text/plain')
-}
-
-function logClear() {
-  clearLogs()
-  logRefresh.value++
 }
 
 const newAcct = reactive({ name: '', server: '', note: '' })
@@ -433,54 +405,6 @@ async function onImportNative() {
         </div>
         <div class="meta" style="font-size: 11px; margin-top: 6px">
           免费版每天 500 次高精度识别。Key 只存本地，不上传。
-        </div>
-      </div>
-
-      <!-- 日志 -->
-      <div class="card settings-block stack" style="grid-column: 1 / -1">
-        <div class="row-between">
-          <h3>日志</h3>
-          <select v-model="store.settings.logLevel" class="select" style="width: 120px">
-            <option value="debug">debug</option>
-            <option value="info">info</option>
-            <option value="warn">warn</option>
-            <option value="error">error</option>
-          </select>
-        </div>
-        <div class="meta" style="font-size: 11px">
-          记录级别：只记录该级别及以上的日志。修改即时生效。
-        </div>
-        <div class="row" style="gap: 6px; flex-wrap: wrap; margin: 8px 0">
-          <button
-            v-for="lv in ['all', 'debug', 'info', 'warn', 'error'] as const"
-            :key="lv"
-            class="btn btn-ghost btn-sm"
-            :class="{ 'btn-secondary': logFilter === lv }"
-            type="button"
-            @click="logFilter = lv"
-          >
-            {{ lv }}
-          </button>
-          <span style="flex: 1" />
-          <button class="btn btn-ghost btn-sm" type="button" @click="logRefresh = logRefresh + 1">刷新</button>
-          <button class="btn btn-ghost btn-sm" type="button" @click="logExport">导出</button>
-          <button class="btn btn-danger btn-sm" type="button" @click="logClear">清空</button>
-        </div>
-        <div
-          style="max-height: 240px; overflow: auto; background: var(--bg); border-radius: 8px; padding: 8px; font-size: 11px; font-family: var(--font-mono)"
-        >
-          <div v-if="!logList.length" class="muted" style="padding: 8px">暂无日志</div>
-          <div v-for="l in logList" :key="l.id" style="display: flex; gap: 6px; padding: 1px 0; white-space: nowrap">
-            <span class="muted" style="flex-shrink: 0">{{ logTime(l.time) }}</span>
-            <span
-              style="flex-shrink: 0; min-width: 38px; text-align: center; border-radius: 3px; font-size: 10px"
-              :style="{ color: logColor(l.level), background: logColor(l.level) + '22' }"
-            >
-              {{ l.level.toUpperCase() }}
-            </span>
-            <span style="color: var(--muted)">{{ l.tag }}</span>
-            <span style="flex: 1; overflow: hidden; text-overflow: ellipsis">{{ l.msg }}</span>
-          </div>
         </div>
       </div>
 

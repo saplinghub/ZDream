@@ -8,6 +8,7 @@ import { useOcrStore } from '@/stores/ocr'
 import { useAppStore } from '@/stores/app'
 import { recognizeImage } from '@/ocr'
 import { notify } from '@/platform/desktop'
+import { logger } from '@/utils/logger'
 
 const ocr = useOcrStore()
 const appStore = useAppStore()
@@ -73,10 +74,13 @@ async function confirm() {
       ocr.setError('请先在设置中配置百度 OCR Key')
       return
     }
+    logger.info('ocr', `识别选区 ${Math.round(sw)}×${Math.round(sh)}，请求百度 OCR`)
     const result = await recognizeImage(b64, { apiKey: baiduApiKey, secretKey: baiduSecretKey })
     ocr.setResult(result)
+    logger.info('ocr', `OCR 成功，识别到 ${result.lines.length} 行文字`)
     notify(`OCR 完成：识别到 ${result.lines.length} 行文字`)
   } catch (e) {
+    logger.error('ocr', `OCR 失败: ${e instanceof Error ? e.message : String(e)}`, e)
     ocr.setError(`OCR 失败：${e instanceof Error ? e.message : String(e)}`)
   } finally {
     ocr.setRunning(false)

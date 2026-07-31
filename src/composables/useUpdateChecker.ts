@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { isTauri } from '@/platform/desktop'
+import { logger } from '@/utils/logger'
 
 export interface UpdateAsset {
   name: string
@@ -120,13 +121,15 @@ export function useUpdateChecker() {
     try {
       const current = await getCurrentVersion()
       const apiUrl = proxyUrl(GITHUB_API, proxy)
-      console.info('[update] check', apiUrl)
+      logger.info('update', `检查更新 | 当前 v${current} | ${apiUrl}`)
       const res = await platformFetch(apiUrl, {
         headers: { Accept: 'application/vnd.github+json' },
         connectTimeout: 15000,
       })
+      logger.info('update', `检查更新 HTTP ${res.status}`)
       if (!res.ok) {
         if (res.status === 403) {
+          logger.warn('update', '检查更新 403：GitHub API 限流')
           status.value = { checking: false, error: 'GitHub API 限流（未认证 60次/小时），请稍后重试或配置加速代理', info: null }
           return null
         }
@@ -153,15 +156,16 @@ export function useUpdateChecker() {
         assets, myAssets, best,
       }
       status.value = { checking: false, error: '', info }
-      console.info('[update] done, latest =', info.latestVersion, 'assets =', assets.length)
+      logger.info('update', `检查更新完成 | 最新 v${info.latestVersion} | 有更新: ${hasUpdate} | 资产 ${assets.length} 个`,
+        assets.map((a) => a.name))
       return info
     } catch (e) {
       const msg = e instanceof Error ? e.message : '未知错误'
       const hint = msg.includes('abort') || msg.includes('Abort')
         ? '（超时）请检查网络或配置加速代理'
         : '（可能网络不通或 GitHub 无法访问）'
+      logger.error('update', `检查更新失败: ${msg} ${hint}`, e)
       status.value = { checking: false, error: `检查更新失败：${msg} ${hint}`, info: null }
-      console.warn('[update] check failed:', e)
       return null
     } finally {
       clearTimeout(timer)
@@ -199,9 +203,10 @@ export function useUpdateChecker() {
 
     try {
       const downloadUrl = proxyUrl(assetUrl, proxy)
-      console.info('[update] download start:', downloadUrl)
+      logger.info('update', `下载开始 | ${fileName} | ${downloadUrl}`)
 
       const res = await platformFetch(downloadUrl, { connectTimeout: 120000 })
+      logger.info('update', `下载响应 HTTP ${res.status}`)
       if (!res.ok) {
         const msg =
           res.status === 404 ? '文件不存在（可能构建中）'
@@ -214,7 +219,7 @@ export function useUpdateChecker() {
       download.value.progress = 60
       const data = await res.arrayBuffer()
       const merged = new Uint8Array(data)
-      console.info('[update] downloaded bytes =', merged.length)
+      logger.info('update', `下载完成 | ${fileName} | ${merged.length} 字节`)
       if (merged.length === 0) throw new Error('下载内容为空')
 
       // Tauri → 写 Downloads
@@ -222,13 +227,13 @@ export function useUpdateChecker() {
         const { writeFile } = await import('@tauri-apps/plugin-fs')
         const { join, downloadDir } = await import('@tauri-apps/api/path')
         const path = await join(await downloadDir(), fileName)
-        console.info('[update] writing to', path)
+        logger.info('update', `写入文件 | ${path}`)
         await writeFile(path, merged)
-        console.info('[update] write ok')
+        logger.info('update', `写入成功 | ${path}`)
         download.value = { downloading: false, progress: 100, fileName, savedPath: path, error: '' }
         return path
       } catch (writeErr) {
-        console.warn('[update] writeFile failed, fallback to browser download:', writeErr)
+        logger.error('update', `写入失败（降级浏览器下载）`, writeErr)
         // 浏览器降级
         const blob = new Blob([merged], { type: 'application/octet-stream' })
         const url = URL.createObjectURL(blob)
@@ -244,7 +249,7 @@ export function useUpdateChecker() {
         return null
       }
       const msg = e instanceof Error ? e.message : '下载失败：网络不可用'
-      console.warn('[update] download failed:', e)
+      logger.error('update', `下载失败: ${msg}`, e)
       download.value = { downloading: false, progress: 0, fileName: '', savedPath: '', error: msg }
       return null
     }

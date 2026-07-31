@@ -36,6 +36,7 @@ const nav = [
   { key: 'ledger', path: '/ledger', label: '记账' },
   { key: 'cbg', path: '/cbg', label: '藏宝阁' },
   { key: 'sessions', path: '/sessions', label: '会话' },
+  { key: 'logs', path: '/logs', label: '日志' },
   { key: 'settings', path: '/settings', label: '设置' },
 ] as const
 
