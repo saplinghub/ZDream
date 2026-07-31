@@ -19,7 +19,6 @@ export async function openFloat(): Promise<void> {
   const existing = all.find((w) => w.label === FLOAT_WINDOW)
   if (existing) {
     await existing.show()
-    await existing.setFocus()
     return
   }
   const w = new WebviewWindow(FLOAT_WINDOW, {
@@ -36,7 +35,7 @@ export async function openFloat(): Promise<void> {
     alwaysOnTop: true,
     skipTaskbar: true,
     visible: true,
-    focus: true,
+    focus: false,
   })
   await new Promise<void>((resolve, reject) => {
     w.once('tauri://created', () => resolve())
