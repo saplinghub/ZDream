@@ -75,11 +75,34 @@ function forceTransparent() {
 // 模块加载时立即执行（早于 onMounted）
 forceTransparent()
 
+function onWindowFocus() {
+  // 唤出时自动展开并聚焦输入框
+  if (collapsed.value && !transitioning.value) {
+    toggleCollapse()
+  } else if (!collapsed.value) {
+    setTimeout(() => {
+      const el = document.querySelector<HTMLInputElement>('.f-item-input')
+      el?.focus()
+    }, 400)
+  }
+}
+
 onMounted(() => {
   forceTransparent()
+  window.addEventListener('focus', onWindowFocus)
   window.addEventListener('blur', onBlur)
+  // 首次打开时聚焦输入框
+  if (!collapsed.value) {
+    setTimeout(() => {
+      const el = document.querySelector<HTMLInputElement>('.f-item-input')
+      el?.focus()
+    }, 500)
+  }
 })
-onUnmounted(() => window.removeEventListener('blur', onBlur))
+onUnmounted(() => {
+  window.removeEventListener('focus', onWindowFocus)
+  window.removeEventListener('blur', onBlur)
+})
 
 async function onBlur() {
   if (collapsed.value || transitioning.value) return
