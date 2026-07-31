@@ -416,6 +416,4 @@ html, body, #app {
   transition: none;
   pointer-events: none;
 }
-
-}
 </style>
