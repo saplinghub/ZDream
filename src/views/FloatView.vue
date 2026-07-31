@@ -11,10 +11,11 @@ const store = useAppStore()
 const activityStore = useActivityStore()
 const collapsed = ref(false)
 
-// ── 点击 vs 拖动（绝对定位：窗口 = 鼠标 - 固定偏移，无累积误差）──
-let dragOffsetX = 0
+// ── 点击 vs 拖动（绝对定位 + 物理坐标统一）──
+let pxRatio = 1 // e.screenX → 物理像素 倍率（mousedown 校准）
+let dragOffsetX = 0 // 物理像素
 let dragOffsetY = 0
-let winPos = { x: 0, y: 0 } // 本地维护窗口物理坐标
+let winPos = { x: 0, y: 0 } // 窗口物理坐标
 let winPosInit = false
 let moveSeq = 0 // 最新一次移动的序号
 const isDragging = ref(false)
@@ -26,36 +27,43 @@ function onBallDown(e: MouseEvent) {
   if (e.button !== 0) return
   pressing.value = true
   isDragging.value = false
-  const startMouse = { x: e.screenX, y: e.screenY }
   document.addEventListener('mousemove', onBallMove)
   document.addEventListener('mouseup', onBallUp)
-  // 每次按下都读取窗口位置，计算鼠标相对窗口的固定偏移
-  import('@tauri-apps/api/webviewWindow').then(async ({ getCurrentWebviewWindow }) => {
+  // 校准单位 + 计算固定偏移（全部物理像素，避免逻辑/物理混用导致的不跟手）
+  Promise.all([
+    import('@tauri-apps/api/window'),
+    import('@tauri-apps/api/webviewWindow'),
+  ]).then(async ([winApi, wvApi]) => {
     try {
-      const pos = await getCurrentWebviewWindow().outerPosition()
+      const cursor = await winApi.cursorPosition() // 物理
+      const pos = await wvApi.getCurrentWebviewWindow().outerPosition() // 物理
+      pxRatio = e.screenX !== 0 ? cursor.x / e.screenX : 1 // 校准 screenX → 物理 倍率
       winPos = { x: pos.x, y: pos.y }
+      dragOffsetX = cursor.x - winPos.x
+      dragOffsetY = cursor.y - winPos.y
       winPosInit = true
-      dragOffsetX = startMouse.x - winPos.x
-      dragOffsetY = startMouse.y - winPos.y
     } catch { /* ignore */ }
   })
 }
 
 function onBallMove(e: MouseEvent) {
   if (!winPosInit) return
-  // 阈值判定：鼠标相对按下点的位移
+  // 鼠标位置统一转为物理像素
+  const mx = e.screenX * pxRatio
+  const my = e.screenY * pxRatio
+  // 阈值判定（物理坐标相对按下点位移）
   if (!isDragging.value) {
-    const movedX = e.screenX - (dragOffsetX + winPos.x)
-    const movedY = e.screenY - (dragOffsetY + winPos.y)
+    const movedX = mx - (dragOffsetX + winPos.x)
+    const movedY = my - (dragOffsetY + winPos.y)
     if (Math.abs(movedX) + Math.abs(movedY) < DRAG_THRESHOLD) return
     isDragging.value = true
     pressing.value = false
   }
-  // 绝对定位：窗口新位置 = 鼠标当前位置 - 固定偏移
+  // 绝对定位：窗口新位置 = 鼠标物理位置 - 固定偏移
   if (e.timeStamp - dragFrame > 8) { // 限频 ~120fps
     dragFrame = e.timeStamp
-    const newX = e.screenX - dragOffsetX
-    const newY = e.screenY - dragOffsetY
+    const newX = mx - dragOffsetX
+    const newY = my - dragOffsetY
     winPos = { x: newX, y: newY }
     const seq = ++moveSeq
     import('@tauri-apps/api/webviewWindow').then(async ({ getCurrentWebviewWindow }) => {
