@@ -13,9 +13,11 @@ import AppToast from '@/components/ui/AppToast.vue'
 import { useAppStore } from '@/stores/app'
 import { applyDesktopChrome, isTauri } from '@/platform/desktop'
 import { openFloat } from '@/platform/windows'
+import { useGlobalHotkey } from '@/composables/useGlobalHotkey'
 
 const store = useAppStore()
 const route = useRoute()
+const hotkey = useGlobalHotkey()
 
 const isAuxChrome = computed(() => {
   const c = route.meta?.chrome
@@ -23,15 +25,6 @@ const isAuxChrome = computed(() => {
 })
 
 function onKey(e: KeyboardEvent) {
-  if (isAuxChrome.value) return
-  if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'R' || e.key === 'r')) {
-    e.preventDefault()
-    if (isTauri()) {
-      openFloat()
-    } else {
-      store.showFloatWin = !store.showFloatWin
-    }
-  }
   if (e.key === 'Escape') {
     store.showFloatWin = false
     store.showQuickDock = false
@@ -40,9 +33,10 @@ function onKey(e: KeyboardEvent) {
 
 onMounted(() => {
   window.addEventListener('keydown', onKey)
-  // 浮窗/独立窗口路由必须完全透明，不能注入 desktop-host 类
   if (!isAuxChrome.value) {
     applyDesktopChrome()
+    // 全局快捷键注册
+    hotkey.register(store.settings.hotkey)
     // 启动时自动打开悬浮球
     if (isTauri() && store.settings.autoOpenFloat) {
       setTimeout(() => openFloat(), 600)
@@ -50,7 +44,10 @@ onMounted(() => {
   }
 })
 
-onUnmounted(() => window.removeEventListener('keydown', onKey))
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKey)
+  hotkey.unregisterAll()
+})
 </script>
 
 <template>
