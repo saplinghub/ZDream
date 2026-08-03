@@ -95,6 +95,7 @@ async function recognize() {
       words: result.words,
       direction: result.direction,
       raw: result.raw,
+      capturedImgUrl: canvas.toDataURL('image/png'),
     })
     notify(`OCR 完成：识别到 ${result.lines.length} 行文字`)
   } catch (e) {

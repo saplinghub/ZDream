@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
-import { fmtMh, fmtTimeShort } from '@/utils/format'
-import type { Template } from '@/types'
+import { fmtMh, fmtMhAsset, fmtTimeShort } from '@/utils/format'
 
 const store = useAppStore()
-const tab = ref<'game' | 'card' | 'flow'>('game')
+const tab = ref<'summary' | 'game' | 'card' | 'flow'>('summary')
 
 const game = reactive({
   accountId: '',
@@ -36,6 +35,49 @@ const flowFilter = reactive({
   cat: '',
   q: '',
 })
+
+// 资金额度汇总计算
+const totalCashMh = computed(() => store.accounts.reduce((s, a) => s + (a.cashMh || 0), 0))
+const totalReserveMh = computed(() => store.accounts.reduce((s, a) => s + (a.reserveMh || 0), 0))
+const totalBankMh = computed(() => store.accounts.reduce((s, a) => s + (a.bankMh || 0), 0))
+const totalMhSum = computed(() => totalCashMh.value + totalReserveMh.value + totalBankMh.value)
+const totalCardPoints = computed(() => store.accounts.reduce((s, a) => s + (a.cardPoints || 0), 0))
+const totalXianyu = computed(() => store.accounts.reduce((s, a) => s + (a.xianyu || 0), 0))
+
+// 快捷修改资产额度 Modal
+const editingAssetAcctId = ref<string | null>(null)
+const editAssetForm = reactive({
+  cardPoints: 0,
+  cashMh: 0,
+  reserveMh: 0,
+  bankMh: 0,
+  xianyu: 0,
+})
+
+function openEditAsset(acctId: string) {
+  const a = store.accounts.find((x) => x.id === acctId)
+  if (!a) return
+  editingAssetAcctId.value = acctId
+  editAssetForm.cardPoints = a.cardPoints || 0
+  editAssetForm.cashMh = a.cashMh || 0
+  editAssetForm.reserveMh = a.reserveMh || 0
+  editAssetForm.bankMh = a.bankMh || 0
+  editAssetForm.xianyu = a.xianyu || 0
+}
+
+function saveAssetEdit() {
+  if (!editingAssetAcctId.value) return
+  const a = store.accounts.find((x) => x.id === editingAssetAcctId.value)
+  if (a) {
+    a.cardPoints = Number(editAssetForm.cardPoints) || 0
+    a.cashMh = Number(editAssetForm.cashMh) || 0
+    a.reserveMh = Number(editAssetForm.reserveMh) || 0
+    a.bankMh = Number(editAssetForm.bankMh) || 0
+    a.xianyu = Number(editAssetForm.xianyu) || 0
+    store.toast(`已更新【${a.name}】资金资产额度`)
+  }
+  editingAssetAcctId.value = null
+}
 
 watch(
   () => store.accounts,
@@ -100,33 +142,6 @@ function saveGame() {
   }
 }
 
-function applyTpl(t: Template) {
-  if (t.rmb) {
-    tab.value = 'card'
-    card.accountId = t.accountId
-    card.cardType = t.item.includes('月') ? '月卡' : t.item.includes('年') ? '年卡' : '散点'
-    card.amount = Number(t.price) || 60
-    return
-  }
-  tab.value = 'game'
-  game.accountId = t.accountId
-  game.item = t.item
-  game.io = t.io
-  game.sub = t.sub || '日常'
-  if (t.qty) game.qty = Number(t.qty)
-  if (t.price) game.price = Number(t.price)
-  if (t.qty && t.price) {
-    store.addGameRecord({
-      accountId: t.accountId,
-      item: t.item,
-      qty: Number(t.qty),
-      price: Number(t.price),
-      io: t.io,
-      sub: t.sub,
-    })
-  }
-}
-
 function saveCard() {
   store.addCardRecord({ ...card })
 }
@@ -152,7 +167,7 @@ function copyRecord(id: string) {
 }
 
 function ocrStub() {
-  store.toast('OCR 截图识别将在 P1 接入（占位）')
+  store.toast('请快捷键 Ctrl+A 或侧边栏截图识别')
 }
 
 function tagClass(cat: string) {
@@ -171,26 +186,83 @@ function tagClass(cat: string) {
         <p class="sub">游戏流水 · 点卡充值 · 统一流水</p>
       </div>
       <div class="seg">
-        <button type="button" :class="{ active: tab === 'game' }" @click="tab = 'game'">游戏收支</button>
-        <button type="button" :class="{ active: tab === 'card' }" @click="tab = 'card'">点卡/消费</button>
-        <button type="button" :class="{ active: tab === 'flow' }" @click="tab = 'flow'">统一流水</button>
+        <button type="button" :class="{ active: tab === 'summary' }" @click="tab = 'summary'">💰 资产汇总</button>
+        <button type="button" :class="{ active: tab === 'game' }" @click="tab = 'game'">🎮 游戏收支</button>
+        <button type="button" :class="{ active: tab === 'card' }" @click="tab = 'card'">💳 点卡/消费</button>
+        <button type="button" :class="{ active: tab === 'flow' }" @click="tab = 'flow'">📋 统一流水</button>
+      </div>
+    </div>
+
+    <!-- 💰 1. 多账号资金资产额度与总汇总 -->
+    <div v-show="tab === 'summary'" class="card asset-summary-card" style="margin-bottom: 16px">
+      <div class="row-between" style="margin-bottom: 12px">
+        <div>
+          <h2 style="margin:0;font-size:16px;display:flex;align-items:center;gap:6px">
+            💰 账号资金与资产汇总
+          </h2>
+          <span class="meta" style="font-size:11px">实时汇总全角色的点卡数、现金、储备金、钱庄与仙玉额度</span>
+        </div>
+      </div>
+
+      <!-- 全服额度总汇总牌 -->
+      <div class="asset-totals-grid" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));gap:10px;margin-bottom:14px;padding:12px;background:var(--bg);border-radius:8px;border:1px solid var(--border)">
+        <div class="tot-item">
+          <div class="meta" style="font-size:11px">🪙 现金梦幻币总额</div>
+          <div style="font-size:15px;font-weight:700;color:var(--accent);margin-top:2px">{{ fmtMhAsset(totalCashMh) }}</div>
+        </div>
+        <div class="tot-item">
+          <div class="meta" style="font-size:11px">🎁 储备金总额</div>
+          <div style="font-size:15px;font-weight:700;color:var(--warn);margin-top:2px">{{ fmtMhAsset(totalReserveMh) }}</div>
+        </div>
+        <div class="tot-item">
+          <div class="meta" style="font-size:11px">🏦 钱庄存款总额</div>
+          <div style="font-size:15px;font-weight:700;margin-top:2px">{{ fmtMhAsset(totalBankMh) }}</div>
+        </div>
+        <div class="tot-item">
+          <div class="meta" style="font-size:11px">💎 梦幻币资产汇总</div>
+          <div style="font-size:15px;font-weight:700;color:var(--text);margin-top:2px">{{ fmtMhAsset(totalMhSum) }}</div>
+        </div>
+        <div class="tot-item">
+          <div class="meta" style="font-size:11px">💳 点卡总余额</div>
+          <div style="font-size:15px;font-weight:700;margin-top:2px">{{ totalCardPoints.toLocaleString() }} <span style="font-size:11px;font-weight:normal;color:var(--muted)">点</span></div>
+        </div>
+        <div class="tot-item">
+          <div class="meta" style="font-size:11px">✨ 仙玉总数</div>
+          <div style="font-size:15px;font-weight:700;margin-top:2px">{{ totalXianyu.toLocaleString() }} <span style="font-size:11px;font-weight:normal;color:var(--muted)">个</span></div>
+        </div>
+      </div>
+
+      <!-- 分账号卡片网格 -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(220px, 1fr));gap:10px">
+        <div
+          v-for="a in store.accounts"
+          :key="a.id"
+          class="acct-asset-card"
+          style="padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:8px"
+        >
+          <div class="row-between" style="margin-bottom:8px">
+            <span style="font-weight:700;font-size:14px">{{ a.name }}</span>
+            <button class="btn btn-ghost btn-sm" type="button" style="padding:2px 8px;font-size:11px" @click="openEditAsset(a.id)">
+              ✏️ 修改额度
+            </button>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px;color:var(--muted)">
+            <div>💳 点卡: <span style="color:var(--text);font-weight:600">{{ (a.cardPoints || 0).toLocaleString() }}</span> 点</div>
+            <div>💎 仙玉: <span style="color:var(--text);font-weight:600">{{ (a.xianyu || 0).toLocaleString() }}</span> 个</div>
+            <div>🪙 现金: <span style="color:var(--text);font-weight:600">{{ fmtMh(a.cashMh || 0) }}</span></div>
+            <div>🎁 储备: <span style="color:var(--text);font-weight:600">{{ fmtMh(a.reserveMh || 0) }}</span></div>
+            <div style="grid-column:span 2">🏦 钱庄存款: <span style="color:var(--text);font-weight:600">{{ fmtMh(a.bankMh || 0) }}</span></div>
+          </div>
+          <div style="margin-top:8px;padding-top:6px;border-top:1px dashed var(--border);display:flex;justify-content:space-between;align-items:center;font-size:12px">
+            <span class="meta">角色梦幻币小计</span>
+            <span style="font-weight:700;color:var(--accent)">{{ fmtMhAsset((a.cashMh || 0) + (a.reserveMh || 0) + (a.bankMh || 0)) }}</span>
+          </div>
+        </div>
       </div>
     </div>
 
     <!-- 游戏 -->
     <div v-show="tab === 'game'">
-      <div class="card" style="margin-bottom: 12px">
-        <div class="row-between" style="margin-bottom: 10px">
-          <h2>快捷模板</h2>
-          <span class="meta">数量/单价可补填</span>
-        </div>
-        <div class="template-row">
-          <button v-for="t in store.templates" :key="t.id" type="button" class="tpl" @click="applyTpl(t)">
-            <div class="t">{{ t.rmb ? 'RMB' : t.io === 'in' ? '收入' : '消耗' }} · {{ t.sub }}</div>
-            <div class="n">{{ t.name }}</div>
-          </button>
-        </div>
-      </div>
       <div class="split-pane">
         <div class="card stack">
           <h2>快速记录</h2>
@@ -258,148 +330,269 @@ function tagClass(cat: string) {
             <span class="meta">{{ fmtTimeShort(r.time) }}</span>
             <div class="sum">
               <div>{{ r.sum }}</div>
-              <div class="sub">{{ r.accountName }} · {{ r.tag }}</div>
+              <div class="meta" style="font-size: 11px">{{ r.accountName }} · {{ r.tag }}</div>
             </div>
-            <div style="text-align: right">
-              <div class="amt" :class="r.pos ? 'pos' : 'neg'">{{ r.amt }}</div>
-              <div class="ops" style="opacity: 1; justify-content: flex-end; margin-top: 4px">
-                <button class="btn btn-ghost btn-sm" type="button" @click="copyRecord(r.id)">复制</button>
-                <button class="btn btn-ghost btn-sm" type="button" @click="store.openEditRecord(r.id)">编辑</button>
-                <button class="btn btn-ghost btn-sm" type="button" @click="store.deleteRecord(r.id)">删</button>
-              </div>
-            </div>
+            <span class="amt num" :class="{ in: r.pos, out: !r.pos }">{{ r.amt }}</span>
+            <button class="btn btn-ghost btn-sm" type="button" title="再次记录" @click="copyRecord(r.id)">
+              +1
+            </button>
           </div>
         </div>
       </div>
     </div>
 
     <!-- 点卡 -->
-    <div v-show="tab === 'card'">
-      <div class="grid-2">
-        <div class="card stack">
-          <h2>点卡购买</h2>
-          <div class="field">
-            <label>账号</label>
-            <select v-model="card.accountId" class="select">
-              <option v-for="a in store.accounts" :key="a.id" :value="a.id">{{ a.name }}</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>卡类型</label>
-            <select v-model="card.cardType" class="select">
-              <option>月卡</option>
-              <option>年卡</option>
-              <option>散点</option>
-            </select>
-          </div>
-          <div class="grid-2">
-            <div class="field">
-              <label>金额（RMB）</label>
-              <input v-model.number="card.amount" class="input num" type="number" />
-            </div>
-            <div class="field">
-              <label>获得点数</label>
-              <input v-model.number="card.points" class="input num" type="number" />
-            </div>
-          </div>
-          <div class="field">
-            <label>备注</label>
-            <input v-model="card.note" class="input" placeholder="选填" />
-          </div>
-          <button class="btn btn-primary" type="button" @click="saveCard">记录点卡</button>
-          <hr class="rule" />
-          <h2>游戏消费</h2>
-          <div class="field">
-            <label>账号</label>
-            <select v-model="spend.accountId" class="select">
-              <option v-for="a in store.accounts" :key="a.id" :value="a.id">{{ a.name }}</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>消费类型</label>
-            <select v-model="spend.spendType" class="select">
-              <option>锦衣</option>
-              <option>祥瑞</option>
-              <option>传音</option>
-              <option>改名</option>
-              <option>其他</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>金额（RMB）</label>
-            <input v-model.number="spend.amount" class="input num" type="number" />
-          </div>
-          <button class="btn btn-secondary" type="button" @click="saveSpend">记录消费</button>
+    <div v-show="tab === 'card'" class="split-pane">
+      <div class="card stack">
+        <h2>点卡 / 充值记录（RMB）</h2>
+        <div class="field">
+          <label>账号</label>
+          <select v-model="card.accountId" class="select">
+            <option v-for="a in store.accounts" :key="a.id" :value="a.id">{{ a.name }}</option>
+          </select>
         </div>
-        <div class="card">
-          <h2 style="margin-bottom: 8px">RMB 记录</h2>
-          <div v-if="!rmbHist.length" class="empty">暂无 RMB 记录</div>
-          <div v-for="r in rmbHist" :key="r.id" class="list-row">
-            <span class="meta">{{ fmtTimeShort(r.time) }}</span>
-            <div class="sum">
-              <div>{{ r.sum }}</div>
-              <div class="sub">{{ r.accountName }} · {{ r.tag }}</div>
-            </div>
-            <div>
-              <div class="amt neg">{{ r.amt }}</div>
-              <button class="btn btn-ghost btn-sm" type="button" @click="store.deleteRecord(r.id)">删</button>
-            </div>
+        <div class="field">
+          <label>类型</label>
+          <select v-model="card.cardType" class="select">
+            <option>月卡</option>
+            <option>年卡</option>
+            <option>专用点数</option>
+            <option>通用点数</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>金额（¥ RMB）</label>
+          <input v-model.number="card.amount" class="input num" type="number" min="0" />
+        </div>
+        <div class="field">
+          <label>获得点数（选填）</label>
+          <input v-model.number="card.points" class="input num" type="number" min="0" />
+        </div>
+        <button class="btn btn-primary btn-block" type="button" @click="saveCard">保存充值</button>
+
+        <hr style="border: none; border-top: 1px solid var(--border); margin: 16px 0" />
+
+        <h2>其它支出（锦衣 / 外观 / 软妹币）</h2>
+        <div class="field">
+          <label>账号</label>
+          <select v-model="spend.accountId" class="select">
+            <option v-for="a in store.accounts" :key="a.id" :value="a.id">{{ a.name }}</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>消费类型</label>
+          <input v-model="spend.spendType" class="input" placeholder="锦衣 / 祥瑞 / 染衣" />
+        </div>
+        <div class="field">
+          <label>金额（¥ RMB）</label>
+          <input v-model.number="spend.amount" class="input num" type="number" min="0" />
+        </div>
+        <button class="btn btn-secondary btn-block" type="button" @click="saveSpend">保存消费</button>
+      </div>
+
+      <div class="card">
+        <div class="row-between" style="margin-bottom: 8px">
+          <h2>RMB 历史</h2>
+          <span class="meta">{{ rmbHist.length }} 条</span>
+        </div>
+        <div v-if="!rmbHist.length" class="empty">暂无点卡消费</div>
+        <div v-for="r in rmbHist" :key="r.id" class="list-row">
+          <span class="meta">{{ fmtTimeShort(r.time) }}</span>
+          <div class="sum">
+            <div>{{ r.sum }}</div>
+            <div class="meta" style="font-size: 11px">{{ r.accountName }}</div>
           </div>
+          <span class="amt num out">{{ r.amt }}</span>
         </div>
       </div>
     </div>
 
     <!-- 流水 -->
-    <div v-show="tab === 'flow'">
-      <div class="filters">
-        <div class="field">
-          <label>账号</label>
-          <select v-model="flowFilter.accountId" class="select">
-            <option value="">全部</option>
-            <option v-for="a in store.accounts" :key="a.id" :value="a.id">{{ a.name }}</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>大类</label>
-          <select v-model="flowFilter.cat" class="select">
-            <option value="">全部</option>
-            <option value="game">游戏</option>
-            <option value="card">点卡</option>
-            <option value="cbg">藏宝阁</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>关键词</label>
-          <input v-model="flowFilter.q" class="input" placeholder="物品 / 备注" />
-        </div>
+    <div v-show="tab === 'flow'" class="card stack">
+      <div class="row" style="gap: 8px; flex-wrap: wrap">
+        <select v-model="flowFilter.accountId" class="select" style="max-width: 140px">
+          <option value="">全部账号</option>
+          <option v-for="a in store.accounts" :key="a.id" :value="a.id">{{ a.name }}</option>
+        </select>
+        <select v-model="flowFilter.cat" class="select" style="max-width: 140px">
+          <option value="">全部类型</option>
+          <option value="game">游戏收支</option>
+          <option value="card">点卡/消费</option>
+          <option value="cbg">藏宝阁</option>
+        </select>
+        <input v-model="flowFilter.q" class="input" placeholder="关键词搜索..." style="max-width: 200px" />
       </div>
-      <div class="card">
-        <table class="ds-table">
+
+      <div class="table-wrap">
+        <table class="data-table">
           <thead>
             <tr>
               <th>时间</th>
               <th>账号</th>
-              <th>类型</th>
+              <th>分类</th>
               <th>摘要</th>
-              <th class="num-col">金额</th>
-              <th />
+              <th style="text-align: right">金额</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="r in flowRows" :key="r.id">
               <td class="meta">{{ fmtTimeShort(r.time) }}</td>
               <td>{{ r.accountName }}</td>
-              <td><span class="tag" :class="tagClass(r.cat)">{{ r.tag }}</span></td>
+              <td><span class="tag-chip" :class="tagClass(r.cat)">{{ r.tag }}</span></td>
               <td>{{ r.sum }}</td>
-              <td class="num-col" :style="{ color: r.pos ? 'var(--accent)' : 'var(--danger)' }">{{ r.amt }}</td>
-              <td>
-                <button class="btn btn-ghost btn-sm" type="button" @click="store.deleteRecord(r.id)">删除</button>
-              </td>
+              <td style="text-align: right; font-weight: 700" :class="{ in: r.pos, out: !r.pos }">{{ r.amt }}</td>
             </tr>
           </tbody>
         </table>
-        <div v-if="!flowRows.length" class="empty">无匹配记录</div>
+      </div>
+    </div>
+
+    <!-- 修改角色资金资产 Modal -->
+    <div v-if="editingAssetAcctId" class="modal-backdrop" @click.self="editingAssetAcctId = null">
+      <div class="modal-box" style="max-width:420px">
+        <h3>✏️ 修改角色资金资产额度</h3>
+        <form class="modal-form" @submit.prevent="saveAssetEdit">
+          <div class="grid-2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <label class="form-item">
+              <span>💳 点卡余额 (点)</span>
+              <input v-model.number="editAssetForm.cardPoints" class="input num" type="number" min="0" />
+            </label>
+            <label class="form-item">
+              <span>💎 仙玉数量 (个)</span>
+              <input v-model.number="editAssetForm.xianyu" class="input num" type="number" min="0" />
+            </label>
+          </div>
+          <label class="form-item">
+            <span>🪙 现金梦幻币 (两)</span>
+            <input v-model.number="editAssetForm.cashMh" class="input num" type="number" min="0" />
+          </label>
+          <label class="form-item">
+            <span>🎁 储备金 (两)</span>
+            <input v-model.number="editAssetForm.reserveMh" class="input num" type="number" min="0" />
+          </label>
+          <label class="form-item">
+            <span>🏦 钱庄存款 (两)</span>
+            <input v-model.number="editAssetForm.bankMh" class="input num" type="number" min="0" />
+          </label>
+          <div class="modal-actions" style="margin-top:12px">
+            <button class="btn btn-primary" type="submit">保存更新</button>
+            <button class="btn btn-ghost" type="button" @click="editingAssetAcctId = null">取消</button>
+          </div>
+        </form>
       </div>
     </div>
   </section>
 </template>
+
+<style scoped>
+.screen-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 16px;
+}
+.eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+.sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+.seg {
+  display: flex;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+.seg button {
+  padding: 6px 14px;
+  font-size: 13px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.seg button.active {
+  background: var(--accent);
+  color: #fff;
+}
+.split-pane {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 16px;
+}
+.list-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.list-row .sum {
+  flex: 1;
+}
+.amt {
+  font-weight: 700;
+}
+.amt.in {
+  color: var(--accent);
+}
+.amt.out {
+  color: var(--danger);
+}
+.tag-chip {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+.tag-game {
+  background: color-mix(in oklch, var(--accent) 15%, transparent);
+  color: var(--accent);
+}
+.tag-card {
+  background: color-mix(in oklch, var(--warn) 15%, transparent);
+  color: var(--warn);
+}
+.tag-cbg {
+  background: color-mix(in oklch, var(--danger) 15%, transparent);
+  color: var(--danger);
+}
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+.modal-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  width: 100%;
+}
+.modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+.form-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+</style>

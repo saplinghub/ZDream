@@ -9,6 +9,16 @@ export interface Account {
   since: number | null
   /** 是否属于「上次上线」组合 */
   last: boolean
+  /** 点卡数 (点) */
+  cardPoints?: number
+  /** 现金梦幻币 (两) */
+  cashMh?: number
+  /** 储备金 (两) */
+  reserveMh?: number
+  /** 钱庄梦幻币 (两) */
+  bankMh?: number
+  /** 仙玉 (个) */
+  xianyu?: number
 }
 
 /** 物品字典 */

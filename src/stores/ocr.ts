@@ -7,6 +7,8 @@ export const useOcrStore = defineStore('ocr', () => {
   const result = ref<OcrResult | null>(null)
   const error = ref('')
   const lastTime = ref<number | null>(null)
+  const capturedImgUrl = ref('')
+  const showAiModal = ref(false)
 
   /** 选区模式：全屏截图 base64，等待用户框选 */
   const selecting = ref(false)
@@ -42,6 +44,8 @@ export const useOcrStore = defineStore('ocr', () => {
     result,
     error,
     lastTime,
+    capturedImgUrl,
+    showAiModal,
     selecting,
     screenshot,
     setRunning,

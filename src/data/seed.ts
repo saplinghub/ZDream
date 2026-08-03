@@ -21,6 +21,11 @@ export const seedAccounts: Account[] = [
     online: false,
     since: null,
     last: true,
+    cardPoints: 2400,
+    cashMh: 5800000,
+    reserveMh: 12500000,
+    bankMh: 30000000,
+    xianyu: 360,
   },
   {
     id: 'a2',
@@ -30,6 +35,11 @@ export const seedAccounts: Account[] = [
     online: false,
     since: null,
     last: true,
+    cardPoints: 1800,
+    cashMh: 2100000,
+    reserveMh: 6800000,
+    bankMh: 15000000,
+    xianyu: 100,
   },
   {
     id: 'a3',
@@ -39,6 +49,11 @@ export const seedAccounts: Account[] = [
     online: false,
     since: null,
     last: false,
+    cardPoints: 1200,
+    cashMh: 1500000,
+    reserveMh: 3200000,
+    bankMh: 8000000,
+    xianyu: 0,
   },
   {
     id: 'a4',
@@ -48,6 +63,11 @@ export const seedAccounts: Account[] = [
     online: false,
     since: null,
     last: true,
+    cardPoints: 600,
+    cashMh: 18500000,
+    reserveMh: 1200000,
+    bankMh: 45000000,
+    xianyu: 50,
   },
 ]
 

@@ -33,16 +33,34 @@ export function fmtDateTime(iso: string): string {
   })
 }
 
-/** 梦幻币：>=1万用「万」 */
+/** 梦幻币：>=1万用「万」，>=1亿用「亿」 */
 export function fmtMh(n: number): string {
   const abs = Math.abs(n)
   const sign = n > 0 ? '+' : n < 0 ? '−' : ''
+  if (abs >= 100000000) {
+    const y = abs / 100000000
+    return `${sign}${y.toFixed(2).replace(/\.?0+$/, '')}亿`
+  }
   if (abs >= 10000) {
     const w = abs / 10000
     const s = w >= 100 ? w.toFixed(0) : w.toFixed(1).replace(/\.0$/, '')
     return `${sign}${s}万`
   }
   return `${sign}${Math.round(abs).toLocaleString('zh-CN')}`
+}
+
+/** 梦幻币全额资产展示（包含单位两） */
+export function fmtMhAsset(n: number): string {
+  const abs = Math.abs(n)
+  if (abs >= 100000000) {
+    const y = abs / 100000000
+    return `${y.toFixed(3).replace(/\.?0+$/, '')} 亿两`
+  }
+  if (abs >= 10000) {
+    const w = abs / 10000
+    return `${w.toFixed(1).replace(/\.0$/, '')} 万两`
+  }
+  return `${Math.round(abs).toLocaleString('zh-CN')} 两`
 }
 
 /** RMB 展示 */

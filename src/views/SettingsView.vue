@@ -8,9 +8,11 @@ import { useUpdateChecker } from '@/composables/useUpdateChecker'
 import { useOcrStore } from '@/stores/ocr'
 import { runOcrCapture } from '@/ocr/runner'
 import HotkeyRecorder from '@/components/ui/HotkeyRecorder.vue'
+import { PRESETS, useAiStore, type AiProvider } from '@/stores/ai'
 
 const store = useAppStore()
 const ocr = useOcrStore()
+const ai = useAiStore()
 
 const hotkeyConflict = computed(() => {
   if (store.settings.hotkey && store.settings.hotkey === store.settings.ocrHotkey) {
@@ -478,6 +480,82 @@ const activeTab = ref<'account' | 'shortcut' | 'appearance' | 'advanced'>('accou
         </div>
         <div class="meta" style="font-size: 11px; margin-top: 6px">
           免费版每天 500 次高精度识别。Key 只存本地，不上传。
+        </div>
+      </div>
+
+      <!-- AI 大模型配置 -->
+      <div class="card settings-block stack">
+        <div class="row-between">
+          <h3>🤖 AI 大模型配置 (智能意图分析)</h3>
+          <span class="meta" style="font-size: 12px">OpenAI 标准 REST API 架构</span>
+        </div>
+
+        <div class="field">
+          <label>服务预设 (Preset)</label>
+          <div class="row" style="gap: 8px; flex-wrap: wrap">
+            <button
+              v-for="(p, key) in PRESETS"
+              :key="key"
+              type="button"
+              class="btn btn-sm"
+              :class="ai.settings.provider === key ? 'btn-primary' : 'btn-secondary'"
+              @click="ai.applyPreset(key as AiProvider)"
+            >
+              {{ p.name }}
+            </button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>API Base URL</label>
+          <input
+            v-model="ai.settings.baseUrl"
+            class="input"
+            placeholder="https://api.deepseek.com / http://localhost:11434/v1"
+            autocomplete="off"
+          />
+        </div>
+
+        <div class="field">
+          <label>API Key (密钥)</label>
+          <input
+            v-model="ai.settings.apiKey"
+            class="input"
+            type="password"
+            placeholder="sk-..."
+            autocomplete="off"
+          />
+        </div>
+
+        <div class="field">
+          <label>模型名称 (Model)</label>
+          <input
+            v-model="ai.settings.model"
+            class="input"
+            placeholder="deepseek-chat / gpt-4o-mini / qwen2.5:7b"
+            autocomplete="off"
+          />
+        </div>
+
+        <div class="row" style="gap: 8px; align-items: center">
+          <button
+            class="btn btn-secondary btn-sm"
+            type="button"
+            :disabled="ai.testing"
+            @click="ai.testConnection()"
+          >
+            {{ ai.testing ? '正在测试...' : '🧪 测试 AI 连通性' }}
+          </button>
+          <span v-if="ai.testSuccess" style="color: var(--accent); font-size: 12px">
+            ✅ AI 接口连接正常！
+          </span>
+          <span v-if="ai.testError" style="color: var(--danger); font-size: 12px">
+            {{ ai.testError }}
+          </span>
+        </div>
+
+        <div class="meta" style="font-size: 11px; margin-top: 4px">
+          配置 AI 后，按 <b>Ctrl+A</b> 选区截图识别时将自动进行意图分析并展现预览确认卡片。Key 只存本地 SQLite / localStorage。
         </div>
       </div>
 

@@ -368,7 +368,16 @@ export const useAppStore = defineStore('app', () => {
   }
 
   // —— 账号 / 物品 ——
-  function addAccount( partial: { name: string; server?: string; note?: string }) {
+  function addAccount(partial: {
+    name: string
+    server?: string
+    note?: string
+    cardPoints?: number
+    cashMh?: number
+    reserveMh?: number
+    bankMh?: number
+    xianyu?: number
+  }) {
     const name = partial.name.trim()
     if (!name) {
       toast('账号名称必填')
@@ -382,6 +391,11 @@ export const useAppStore = defineStore('app', () => {
       online: false,
       since: null,
       last: false,
+      cardPoints: partial.cardPoints || 0,
+      cashMh: partial.cashMh || 0,
+      reserveMh: partial.reserveMh || 0,
+      bankMh: partial.bankMh || 0,
+      xianyu: partial.xianyu || 0,
     })
     broadcastAccountState()
     toast('已添加账号')

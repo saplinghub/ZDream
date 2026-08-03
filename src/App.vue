@@ -24,8 +24,26 @@ import {
 } from '@/composables/useGlobalHotkey'
 import { runOcrCapture } from '@/ocr/runner'
 
+import AiCaptureModal from '@/components/ui/AiCaptureModal.vue'
+
 const store = useAppStore()
+const ocrStore = useOcrStore()
 const route = useRoute()
+
+function onAiCaptureSubmit(payload: { accountId: string; item: string; qty: number; price: number; io: 'in' | 'out'; sub: string }) {
+  const ok = store.addGameRecord({
+    accountId: payload.accountId,
+    item: payload.item,
+    qty: payload.qty,
+    price: payload.price,
+    io: payload.io,
+    sub: payload.sub,
+  })
+  if (ok) {
+    store.toast(`✅ 已记账：${payload.item} × ${payload.qty}`)
+  }
+  ocrStore.showAiModal = false
+}
 
 const isAuxChrome = computed(() => {
   const c = route.meta?.chrome
@@ -76,8 +94,15 @@ onMounted(() => {
   if (!isAuxChrome.value && isTauri()) {
     import('@tauri-apps/api/event').then(({ listen }) => {
       listen('capture:result', (ev) => {
-        const payload = ev.payload as { ok: boolean; error?: string; lines?: string[]; words?: unknown[]; direction?: number; raw?: unknown }
-        const ocrStore = useOcrStore()
+        const payload = ev.payload as {
+          ok: boolean
+          error?: string
+          lines?: string[]
+          words?: unknown[]
+          direction?: number
+          raw?: unknown
+          capturedImgUrl?: string
+        }
         if (payload.ok) {
           ocrStore.setResult({
             lines: payload.lines || [],
@@ -85,9 +110,12 @@ onMounted(() => {
             direction: payload.direction || 0,
             raw: payload.raw,
           })
+          ocrStore.capturedImgUrl = payload.capturedImgUrl || ''
         } else {
           ocrStore.setError(payload.error || '未知错误')
+          ocrStore.capturedImgUrl = ''
         }
+        ocrStore.showAiModal = true
       })
     })
   }
@@ -139,6 +167,14 @@ onUnmounted(() => {
     <EditRecordModal />
     <!-- 浏览器降级：旧版快捷记账浮层 -->
     <QuickFloat />
+    <AiCaptureModal
+      :show="ocrStore.showAiModal"
+      :img-url="ocrStore.capturedImgUrl"
+      :ocr-lines="ocrStore.result?.lines"
+      :ocr-error="ocrStore.error"
+      @close="ocrStore.showAiModal = false"
+      @submit="onAiCaptureSubmit"
+    />
     <AppToast />
   </template>
 </template>

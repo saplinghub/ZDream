@@ -14,12 +14,22 @@ const form = reactive({
   name: '',
   server: '',
   note: '',
+  cardPoints: 0,
+  cashMh: 0,
+  reserveMh: 0,
+  bankMh: 0,
+  xianyu: 0,
 })
 
 function resetForm() {
   form.name = ''
   form.server = ''
   form.note = ''
+  form.cardPoints = 0
+  form.cashMh = 0
+  form.reserveMh = 0
+  form.bankMh = 0
+  form.xianyu = 0
 }
 
 function openAdd() {
@@ -33,6 +43,11 @@ function submitAdd() {
     name: form.name.trim(),
     server: form.server.trim(),
     note: form.note.trim(),
+    cardPoints: Number(form.cardPoints) || 0,
+    cashMh: Number(form.cashMh) || 0,
+    reserveMh: Number(form.reserveMh) || 0,
+    bankMh: Number(form.bankMh) || 0,
+    xianyu: Number(form.xianyu) || 0,
   })
   showAddModal.value = false
   resetForm()
@@ -45,6 +60,11 @@ function openEdit(id: string) {
   form.name = acct.name
   form.server = acct.server || ''
   form.note = acct.note || ''
+  form.cardPoints = acct.cardPoints || 0
+  form.cashMh = acct.cashMh || 0
+  form.reserveMh = acct.reserveMh || 0
+  form.bankMh = acct.bankMh || 0
+  form.xianyu = acct.xianyu || 0
   showEditModal.value = true
 }
 
@@ -55,6 +75,11 @@ function submitEdit() {
     acct.name = form.name.trim()
     acct.server = form.server.trim()
     acct.note = form.note.trim()
+    acct.cardPoints = Number(form.cardPoints) || 0
+    acct.cashMh = Number(form.cashMh) || 0
+    acct.reserveMh = Number(form.reserveMh) || 0
+    acct.bankMh = Number(form.bankMh) || 0
+    acct.xianyu = Number(form.xianyu) || 0
   }
   showEditModal.value = false
   editingAccountId.value = null
@@ -134,6 +159,12 @@ function removeAccount(id: string) {
               <span class="val">{{ acct.server || '未指定' }}</span>
             </div>
             <div class="detail-row">
+              <span class="label">资产情况：</span>
+              <span class="val" style="font-size:11px">
+                💳点卡 {{ acct.cardPoints || 0 }}点 · 🪙现金 {{ (acct.cashMh || 0).toLocaleString() }}两
+              </span>
+            </div>
+            <div class="detail-row">
               <span class="label">备注：</span>
               <span class="val">{{ acct.note || '无备注' }}</span>
             </div>
@@ -164,6 +195,28 @@ function removeAccount(id: string) {
             <span>区服/服务器</span>
             <input v-model="form.server" class="input" placeholder="如：浙江一区 - 桃花岛" />
           </label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <label class="form-item">
+              <span>💳 点卡数 (点)</span>
+              <input v-model.number="form.cardPoints" class="input num" type="number" min="0" />
+            </label>
+            <label class="form-item">
+              <span>💎 仙玉 (个)</span>
+              <input v-model.number="form.xianyu" class="input num" type="number" min="0" />
+            </label>
+          </div>
+          <label class="form-item">
+            <span>🪙 现金梦幻币 (两)</span>
+            <input v-model.number="form.cashMh" class="input num" type="number" min="0" />
+          </label>
+          <label class="form-item">
+            <span>🎁 储备金 (两)</span>
+            <input v-model.number="form.reserveMh" class="input num" type="number" min="0" />
+          </label>
+          <label class="form-item">
+            <span>🏦 钱庄存款 (两)</span>
+            <input v-model.number="form.bankMh" class="input num" type="number" min="0" />
+          </label>
           <label class="form-item">
             <span>备注说明</span>
             <input v-model="form.note" class="input" placeholder="如：师门/抓鬼/刷副本主力" />
@@ -188,6 +241,28 @@ function removeAccount(id: string) {
           <label class="form-item">
             <span>区服/服务器</span>
             <input v-model="form.server" class="input" placeholder="如：浙江一区 - 桃花岛" />
+          </label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <label class="form-item">
+              <span>💳 点卡数 (点)</span>
+              <input v-model.number="form.cardPoints" class="input num" type="number" min="0" />
+            </label>
+            <label class="form-item">
+              <span>💎 仙玉 (个)</span>
+              <input v-model.number="form.xianyu" class="input num" type="number" min="0" />
+            </label>
+          </div>
+          <label class="form-item">
+            <span>🪙 现金梦幻币 (两)</span>
+            <input v-model.number="form.cashMh" class="input num" type="number" min="0" />
+          </label>
+          <label class="form-item">
+            <span>🎁 储备金 (两)</span>
+            <input v-model.number="form.reserveMh" class="input num" type="number" min="0" />
+          </label>
+          <label class="form-item">
+            <span>🏦 钱庄存款 (两)</span>
+            <input v-model.number="form.bankMh" class="input num" type="number" min="0" />
           </label>
           <label class="form-item">
             <span>备注说明</span>
