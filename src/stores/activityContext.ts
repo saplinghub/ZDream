@@ -31,6 +31,18 @@ export const useActivityContextStore = defineStore('activityContext', () => {
       }
     }
 
+    // 2. 若当前开启了抓鬼任务助手
+    if (activityStore.currentId === 'ghost') {
+      const activeAcct = appStore.accounts.find((a) => a.online) || appStore.accounts[0]
+      return {
+        type: 'ghost',
+        name: '钟馗抓鬼助手模式',
+        currentAccountName: activeAcct?.name || '',
+        currentAccountServer: activeAcct?.server || '',
+        taskDescription: '正在带队做钟馗抓鬼任务，涉及地图路线识别、坐标匹配与第10环环装收益归集',
+      }
+    }
+
     // 2. 默认通用模式
     const activeAccount = appStore.accounts.find((a) => a.online) || appStore.accounts[0]
     return {

@@ -59,6 +59,14 @@ const COMMANDS: CommandOption[] = [
     keywords: ['师门', 'sm', 'shimen', '任务', '计时'],
   },
   {
+    id: 'ghost',
+    name: '开启 钟馗抓鬼助手',
+    desc: '地图路线推导 · 坐标指引 · 10环收益',
+    icon: '👻',
+    activityId: 'ghost',
+    keywords: ['抓鬼', 'zg', 'zhuagui', '钟馗', '鬼', '坐标'],
+  },
+  {
     id: 'shops',
     name: '查看 师门店铺速查',
     desc: '低价野宠 · 三药 · 家具编码',

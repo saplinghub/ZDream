@@ -5,6 +5,7 @@
 import { registerActivity } from './registry'
 import { defaultActivity } from './default'
 import { masterQuestPlugin } from './master-quest'
+import { ghostPlugin } from './ghost'
 
 let initialized = false
 
@@ -16,6 +17,8 @@ export function initActivities(): void {
   registerActivity(defaultActivity)
   // 注册师门任务玩法
   registerActivity(masterQuestPlugin)
+  // 注册抓鬼任务玩法
+  registerActivity(ghostPlugin)
 }
 
 export { registerActivity, getActivity, getAllActivities, getActivityIds } from './registry'
