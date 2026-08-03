@@ -23,11 +23,21 @@ const box = ref({ x: 0, y: 0, w: 0, h: 0 })
 const imgNatural = ref({ w: 0, h: 0 })
 const screenshot = ref('')
 
+import { isTauri } from '@/platform/desktop'
+
 // 从 localStorage 读取截图（主窗口截好写入）
 screenshot.value = localStorage.getItem(CAPTURE_KEY) || ''
-if (!screenshot.value) {
-  logger.error('capture', '未找到待选区截图')
-  closeWin()
+
+if (isTauri()) {
+  import('@tauri-apps/api/event').then(({ listen }) => {
+    listen('capture:init', (ev) => {
+      const payload = ev.payload as { screenshot: string }
+      if (payload?.screenshot) {
+        screenshot.value = payload.screenshot
+        logger.info('capture', '通过 Tauri 事件成功接收全屏截图数据')
+      }
+    })
+  })
 }
 
 function onDown(e: MouseEvent) {

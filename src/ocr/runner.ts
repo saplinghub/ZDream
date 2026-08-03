@@ -36,13 +36,28 @@ export async function runOcrCapture(): Promise<void> {
   try {
     const shot = await captureScreen()
     logger.info('ocr', `截图完成 ${shot.base64.length} 字符 base64`)
+    const dataUrl = `data:image/png;base64,${shot.base64}`
+    ocrStore.screenshot = dataUrl
+
     try {
-      // 跨窗口传截图：Tauri 多窗口共享 localStorage
-      localStorage.setItem(CAPTURE_KEY, `data:image/png;base64,${shot.base64}`)
-      await openCaptureWindow()
-    } finally {
-      await cleanupCapture(shot.filePath)
+      localStorage.setItem(CAPTURE_KEY, dataUrl)
+    } catch (quotaErr) {
+      logger.warn('ocr', 'localStorage 超过 5MB 额度限制，已捕获并降级通过 Tauri 事件传送图片', quotaErr)
     }
+
+    await openCaptureWindow()
+
+    // 广播 capture:init 事件传图
+    setTimeout(async () => {
+      try {
+        const { emit } = await import('@tauri-apps/api/event')
+        await emit('capture:init', { screenshot: dataUrl })
+      } catch (e) {
+        logger.error('ocr', '广播 capture:init 失败', e)
+      }
+    }, 100)
+
+    await cleanupCapture(shot.filePath)
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     logger.error('ocr', `截图失败: ${msg}`, e)
