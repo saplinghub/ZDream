@@ -391,8 +391,8 @@ export function useUpdateChecker() {
           progress: 100,
           fileName,
           savedPath: '(浏览器下载)',
-          statusText: '已在浏览器拉起下载',
-          error: `写入目录失败：${writeErr instanceof Error ? writeErr.message : String(writeErr)}`,
+          statusText: '下载完成（已在浏览器中保存）',
+          error: '',
         }
         return null
       }

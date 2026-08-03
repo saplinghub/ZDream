@@ -23,12 +23,23 @@
     "dialog:default",
     "fs:default",
     "fs:allow-write",
+    "fs:allow-write-file",
+    "fs:allow-write-text-file",
+    "fs:allow-read-file",
+    "fs:allow-read-text-file",
+    "fs:allow-exists",
     "fs:allow-remove",
+    "fs:allow-mkdir",
     {
       "identifier": "fs:scope",
       "allow": [
+        { "path": "$DOWNLOAD" },
         { "path": "$DOWNLOAD/**" },
+        { "path": "$TEMP" },
+        { "path": "$TEMP/**" },
+        { "path": "$APPDATA" },
         { "path": "$APPDATA/**" },
+        { "path": "$HOME" },
         { "path": "$HOME/**" }
       ]
     },
