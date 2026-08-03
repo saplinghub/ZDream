@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { GHOST_MAPS, type GhostMapItem } from '@/data/ghostMaps'
 
 const props = defineProps<{
@@ -7,6 +7,15 @@ const props = defineProps<{
   posX: number
   posY: number
 }>()
+
+const mapCustomImg = ref<string>(localStorage.getItem(`mhxy-zdream:map-img:${props.mapName}`) || '')
+
+watch(
+  () => props.mapName,
+  (name) => {
+    mapCustomImg.value = localStorage.getItem(`mhxy-zdream:map-img:${name}`) || ''
+  },
+)
 
 const mapConfig = computed<GhostMapItem>(() => {
   const found = GHOST_MAPS.find((m) => m.name === props.mapName)
@@ -18,6 +27,7 @@ const mapConfig = computed<GhostMapItem>(() => {
       maxWidth: 200,
       maxHeight: 150,
       entryPos: { x: 10, y: 10 },
+      bgTheme: 'linear-gradient(135deg, #0f172a 0%, #020617 100%)',
     }
   )
 })
@@ -60,20 +70,53 @@ const rangeBox = computed(() => {
 
   return { minX, maxX, minY, maxY }
 })
+
+const sandboxStyle = computed(() => {
+  if (mapCustomImg.value) {
+    return {
+      backgroundImage: `url(${mapCustomImg.value})`,
+      backgroundSize: '100% 100%',
+      backgroundPosition: 'center',
+      backgroundRepeat: 'no-repeat',
+    }
+  }
+  return {
+    background: mapConfig.value.bgTheme || 'linear-gradient(135deg, #0f172a 0%, #020617 100%)',
+  }
+})
+
+function handleUploadMapImg(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  const reader = new FileReader()
+  reader.onload = (evt) => {
+    const b64 = String(evt.target?.result || '')
+    mapCustomImg.value = b64
+    localStorage.setItem(`mhxy-zdream:map-img:${props.mapName}`, b64)
+  }
+  reader.readAsDataURL(file)
+}
+
+function clearMapImg() {
+  mapCustomImg.value = ''
+  localStorage.removeItem(`mhxy-zdream:map-img:${props.mapName}`)
+}
 </script>
 
 <template>
   <div class="ghost-radar-box">
     <!-- 地图沙盘顶栏标签 -->
     <div class="radar-header">
-      <span class="map-tag">🗺️ {{ mapConfig.name }} 沙盘雷达 (全图 {{ mapConfig.maxWidth }}×{{ mapConfig.maxHeight }})</span>
-      <span class="range-tag">⭕ 鬼怪刷新搜索区: X ({{ rangeBox.minX }}~{{ rangeBox.maxX }}), Y ({{ rangeBox.minY }}~{{ rangeBox.maxY }})</span>
+      <span class="map-tag">🗺️ {{ mapConfig.name }} (全图 {{ mapConfig.maxWidth }}×{{ mapConfig.maxHeight }})</span>
+      <span class="range-tag">⭕ 刷新区: X({{ rangeBox.minX }}~{{ rangeBox.maxX }}), Y({{ rangeBox.minY }}~{{ rangeBox.maxY }})</span>
     </div>
 
-    <!-- 可视化地图容器 -->
-    <div class="radar-sandbox">
-      <!-- 坐标网格背景线条 -->
-      <div class="grid-lines" />
+    <!-- 可视化地图沙盘容器 -->
+    <div class="radar-sandbox" :style="sandboxStyle">
+      <!-- 坐标网格背景线条 (当无背景图片时增强质感) -->
+      <div v-if="!mapCustomImg" class="grid-lines" />
 
       <!-- SVG 传送路线连接虚线 -->
       <svg class="line-svg">
@@ -83,7 +126,7 @@ const rangeBox = computed(() => {
           :x2="`${targetPercent.left}%`"
           :y2="`${targetPercent.top}%`"
           stroke="var(--accent)"
-          stroke-width="1.5"
+          stroke-width="2"
           stroke-dasharray="4 4"
         />
       </svg>
@@ -112,6 +155,23 @@ const rangeBox = computed(() => {
       >
         <span class="point-pin">🎯</span>
         <span class="point-label target-label">({{ posX }}, {{ posY }})</span>
+      </div>
+    </div>
+
+    <!-- 底部真实小地图图片贴入控制 -->
+    <div class="map-img-tools row-between">
+      <span class="muted" style="font-size: 10px">
+        {{ mapCustomImg ? '🖼️ 已载入真实地图缩略图' : '💡 提示：可贴入游戏实际小地图图片' }}
+      </span>
+
+      <div class="row" style="gap: 4px; align-items: center">
+        <label class="btn btn-xs btn-ghost upload-label">
+          📷 {{ mapCustomImg ? '更换小地图' : '贴入游戏小地图' }}
+          <input type="file" accept="image/*" class="file-hide" @change="handleUploadMapImg" />
+        </label>
+        <button v-if="mapCustomImg" class="btn btn-xs btn-ghost" type="button" style="color: var(--danger)" @click="clearMapImg">
+          ✕ 清除
+        </button>
       </div>
     </div>
   </div>
@@ -150,20 +210,20 @@ const rangeBox = computed(() => {
 .radar-sandbox {
   position: relative;
   width: 100%;
-  height: 140px;
-  background: #0f172a;
+  height: 145px;
   border-radius: 6px;
   overflow: hidden;
   border: 1.5px solid color-mix(in oklch, var(--accent) 40%, #000);
-  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.8);
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.7);
+  transition: all 0.3s ease;
 }
 
 /* 网格背景线 */
 .grid-lines {
   position: absolute;
   inset: 0;
-  background-image: linear-gradient(to right, rgba(255, 255, 255, 0.06) 1px, transparent 1px),
-                    linear-gradient(to bottom, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+  background-image: linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+                    linear-gradient(to bottom, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
   background-size: 20px 20px;
 }
 
@@ -197,7 +257,7 @@ const rangeBox = computed(() => {
   font-size: 9px;
   color: #94a3b8;
   white-space: nowrap;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.75);
   padding: 1px 4px;
   border-radius: 3px;
   margin-top: 2px;
@@ -224,7 +284,7 @@ const rangeBox = computed(() => {
   width: 70px;
   height: 70px;
   border-radius: 50%;
-  background: rgba(239, 68, 68, 0.22);
+  background: rgba(239, 68, 68, 0.28);
   border: 1.5px dashed #ef4444;
   pointer-events: none;
   z-index: 5;
@@ -247,5 +307,18 @@ const rangeBox = computed(() => {
     opacity: 0.9;
     box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
   }
+}
+
+.map-img-tools {
+  margin-top: 2px;
+}
+
+.upload-label {
+  cursor: pointer;
+  margin: 0;
+}
+
+.file-hide {
+  display: none;
 }
 </style>

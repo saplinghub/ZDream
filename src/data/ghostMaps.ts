@@ -5,6 +5,7 @@ export interface GhostMapItem {
   maxWidth: number
   maxHeight: number
   entryPos: { x: number; y: number }
+  bgTheme: string
 }
 
 export const GHOST_MAPS: GhostMapItem[] = [
@@ -15,6 +16,7 @@ export const GHOST_MAPS: GhostMapItem[] = [
     maxWidth: 220,
     maxHeight: 150,
     entryPos: { x: 100, y: 70 },
+    bgTheme: 'linear-gradient(135deg, #064e3b 0%, #022c22 100%)',
   },
   {
     name: '长安城',
@@ -23,6 +25,7 @@ export const GHOST_MAPS: GhostMapItem[] = [
     maxWidth: 540,
     maxHeight: 270,
     entryPos: { x: 270, y: 135 },
+    bgTheme: 'linear-gradient(135deg, #78350f 0%, #451a03 100%)',
   },
   {
     name: '建邺城',
@@ -31,6 +34,7 @@ export const GHOST_MAPS: GhostMapItem[] = [
     maxWidth: 280,
     maxHeight: 140,
     entryPos: { x: 60, y: 80 },
+    bgTheme: 'linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%)',
   },
   {
     name: '朱紫国',
@@ -39,6 +43,7 @@ export const GHOST_MAPS: GhostMapItem[] = [
     maxWidth: 180,
     maxHeight: 110,
     entryPos: { x: 90, y: 55 },
+    bgTheme: 'linear-gradient(135deg, #92400e 0%, #713f12 100%)',
   },
   {
     name: '宝象国',
@@ -47,6 +52,7 @@ export const GHOST_MAPS: GhostMapItem[] = [
     maxWidth: 160,
     maxHeight: 120,
     entryPos: { x: 90, y: 60 },
+    bgTheme: 'linear-gradient(135deg, #854d0e 0%, #53380b 100%)',
   },
   {
     name: '西梁女国',
@@ -55,6 +61,7 @@ export const GHOST_MAPS: GhostMapItem[] = [
     maxWidth: 160,
     maxHeight: 140,
     entryPos: { x: 80, y: 70 },
+    bgTheme: 'linear-gradient(135deg, #831843 0%, #500724 100%)',
   },
   {
     name: '长寿村',
@@ -63,6 +70,7 @@ export const GHOST_MAPS: GhostMapItem[] = [
     maxWidth: 160,
     maxHeight: 210,
     entryPos: { x: 80, y: 100 },
+    bgTheme: 'linear-gradient(135deg, #14532d 0%, #052e16 100%)',
   },
   {
     name: '墨家村',
@@ -71,6 +79,7 @@ export const GHOST_MAPS: GhostMapItem[] = [
     maxWidth: 90,
     maxHeight: 110,
     entryPos: { x: 14, y: 10 },
+    bgTheme: 'linear-gradient(135deg, #3f3f46 0%, #18181b 100%)',
   },
   {
     name: '大唐境外',
@@ -79,6 +88,7 @@ export const GHOST_MAPS: GhostMapItem[] = [
     maxWidth: 630,
     maxHeight: 120,
     entryPos: { x: 500, y: 60 },
+    bgTheme: 'linear-gradient(135deg, #713f12 0%, #451a03 100%)',
   },
   {
     name: '大唐郊外',
@@ -87,6 +97,7 @@ export const GHOST_MAPS: GhostMapItem[] = [
     maxWidth: 190,
     maxHeight: 130,
     entryPos: { x: 10, y: 20 },
+    bgTheme: 'linear-gradient(135deg, #166534 0%, #14532d 100%)',
   },
   {
     name: '大唐国境',
@@ -95,6 +106,7 @@ export const GHOST_MAPS: GhostMapItem[] = [
     maxWidth: 350,
     maxHeight: 340,
     entryPos: { x: 10, y: 330 },
+    bgTheme: 'linear-gradient(135deg, #581c87 0%, #3b0764 100%)',
   },
   {
     name: '五庄观',
@@ -103,6 +115,7 @@ export const GHOST_MAPS: GhostMapItem[] = [
     maxWidth: 100,
     maxHeight: 90,
     entryPos: { x: 10, y: 10 },
+    bgTheme: 'linear-gradient(135deg, #15803d 0%, #14532d 100%)',
   },
   {
     name: '阴曹地府',
@@ -111,6 +124,7 @@ export const GHOST_MAPS: GhostMapItem[] = [
     maxWidth: 150,
     maxHeight: 120,
     entryPos: { x: 60, y: 70 },
+    bgTheme: 'linear-gradient(135deg, #311042 0%, #1e092b 100%)',
   },
   {
     name: '女儿村',
@@ -119,6 +133,7 @@ export const GHOST_MAPS: GhostMapItem[] = [
     maxWidth: 120,
     maxHeight: 140,
     entryPos: { x: 5, y: 140 },
+    bgTheme: 'linear-gradient(135deg, #9d174d 0%, #500724 100%)',
   },
   {
     name: '盘丝洞',
@@ -127,6 +142,7 @@ export const GHOST_MAPS: GhostMapItem[] = [
     maxWidth: 200,
     maxHeight: 140,
     entryPos: { x: 10, y: 10 },
+    bgTheme: 'linear-gradient(135deg, #4c1d95 0%, #2e1065 100%)',
   },
   {
     name: '狮驼岭',
@@ -135,6 +151,7 @@ export const GHOST_MAPS: GhostMapItem[] = [
     maxWidth: 130,
     maxHeight: 110,
     entryPos: { x: 120, y: 10 },
+    bgTheme: 'linear-gradient(135deg, #701a75 0%, #4a044e 100%)',
   },
   {
     name: '普陀山',
@@ -143,6 +160,7 @@ export const GHOST_MAPS: GhostMapItem[] = [
     maxWidth: 100,
     maxHeight: 120,
     entryPos: { x: 10, y: 10 },
+    bgTheme: 'linear-gradient(135deg, #047857 0%, #064e3b 100%)',
   },
   {
     name: '长寿郊外',
@@ -151,6 +169,7 @@ export const GHOST_MAPS: GhostMapItem[] = [
     maxWidth: 180,
     maxHeight: 190,
     entryPos: { x: 10, y: 180 },
+    bgTheme: 'linear-gradient(135deg, #14532d 0%, #052e16 100%)',
   },
 ]
 
