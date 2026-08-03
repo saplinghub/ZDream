@@ -24,6 +24,12 @@ const router = createRouter({
       meta: { title: '记账' },
     },
     {
+      path: '/items',
+      name: 'items',
+      component: () => import('@/views/ItemsView.vue'),
+      meta: { title: '道具库' },
+    },
+    {
       path: '/cbg',
       name: 'cbg',
       component: () => import('@/views/CbgView.vue'),

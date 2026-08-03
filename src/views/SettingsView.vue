@@ -2,7 +2,6 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { THEMES } from '@/theme/themes'
-import type { ItemCategory } from '@/types'
 import { openTextFile } from '@/platform/desktop'
 import { useUpdateChecker } from '@/composables/useUpdateChecker'
 import { useOcrStore } from '@/stores/ocr'
@@ -10,30 +9,9 @@ import { runOcrCapture } from '@/ocr/runner'
 import HotkeyRecorder from '@/components/ui/HotkeyRecorder.vue'
 import { PRESETS, useAiStore, type AiProvider } from '@/stores/ai'
 
-import ItemImportModal, { type ParsedImportItem } from '@/components/modals/ItemImportModal.vue'
-
 const store = useAppStore()
 const ocr = useOcrStore()
 const ai = useAiStore()
-
-const showImportModal = ref(false)
-const itemSearch = ref('')
-const itemCatFilter = ref<string>('全部')
-
-const filteredItems = computed(() => {
-  const q = itemSearch.value.trim().toLowerCase()
-  const cat = itemCatFilter.value
-  return store.items.filter((it) => {
-    const matchCat = cat === '全部' || it.cat === cat
-    const matchQ = !q || it.name.toLowerCase().includes(q)
-    return matchCat && matchQ
-  })
-})
-
-function handleBatchImport(payload: { items: ParsedImportItem[]; mode: 'overwrite' | 'skip' | 'append' }) {
-  store.batchImportItems(payload.items, payload.mode)
-  showImportModal.value = false
-}
 
 const hotkeyConflict = computed(() => {
   if (store.settings.hotkey && store.settings.hotkey === store.settings.ocrHotkey) {
@@ -54,7 +32,6 @@ function runOcr() {
 }
 
 const newAcct = reactive({ name: '', server: '', note: '' })
-const newItem = reactive({ name: '', cat: '消耗品' as ItemCategory, price: 0 })
 const fee = reactive({
   feeRate: store.settings.feeRate,
   settleDays: store.settings.settleDays,
@@ -93,12 +70,6 @@ function addAcct() {
   newAcct.name = ''
   newAcct.server = ''
   newAcct.note = ''
-}
-
-function addItem() {
-  store.addItem({ ...newItem })
-  newItem.name = ''
-  newItem.price = 0
 }
 
 function saveFee() {
@@ -224,109 +195,18 @@ const activeTab = ref<'account' | 'shortcut' | 'appearance' | 'ai' | 'advanced'>
         </div>
       </div>
 
-      <div class="card settings-block stack" style="grid-column: 1 / -1">
+      <!-- 2. 梦幻道具库专属入口提示 -->
+      <div class="card settings-block stack" style="grid-column: 1 / -1; padding: 14px; background: color-mix(in oklch, var(--accent) 8%, var(--surface))">
         <div class="row-between">
           <div>
-            <h3>📦 梦幻道具库 (共 {{ store.items.length }} 种道具)</h3>
-            <p class="meta" style="margin: 2px 0 0">支持分类筛选、极速搜索、编辑参考价、自定义单个新增与批量 CSV/JSON 导入/导出</p>
+            <h3 style="margin: 0; font-size: 14px">📦 梦幻道具词典与价格库已升格为一级独立菜单</h3>
+            <p class="meta" style="margin: 4px 0 0; font-size: 12px">
+              现可在左侧导航栏点击 <b>【📦 道具库】</b>，体验海量预设道具管理、极速分类搜索与 CSV/JSON 批量导入/导出功能！
+            </p>
           </div>
-          <div class="row" style="gap: 8px">
-            <button class="btn btn-secondary btn-sm" type="button" @click="showImportModal = true">
-              📥 批量导入 (CSV/JSON/粘贴)
-            </button>
-            <button class="btn btn-ghost btn-sm" type="button" @click="store.resetToPresetItems()">
-              📦 重置为全量预设
-            </button>
-          </div>
-        </div>
-
-        <!-- 筛选与搜索工具条 -->
-        <div class="row-between" style="gap: 12px; margin-top: 6px; flex-wrap: wrap">
-          <!-- 分类 Pill 按钮框 -->
-          <div class="row" style="gap: 4px; flex-wrap: wrap">
-            <button
-              v-for="c in ['全部', '道具', '装备', '兽诀', '宝石', '消耗品', '宠装', '其他']"
-              :key="c"
-              type="button"
-              class="btn btn-xs"
-              :class="itemCatFilter === c ? 'btn-primary' : 'btn-secondary'"
-              @click="itemCatFilter = c"
-            >
-              {{ c }}
-            </button>
-          </div>
-
-          <!-- 搜道具 -->
-          <div style="min-width: 220px; flex: 1">
-            <input
-              v-model="itemSearch"
-              class="input"
-              style="padding: 4px 10px; font-size: 12px"
-              placeholder="🔍 搜索道具名称 (如 金柳露 / 强化石)..."
-            />
-          </div>
-        </div>
-
-        <!-- 手动单个新增卡片 (折叠) -->
-        <div class="stack" style="gap: 8px; background: var(--bg); padding: 10px; border-radius: 8px; margin-top: 4px">
-          <div style="font-weight: 700; font-size: 12px">➕ 手动添加单个新道具：</div>
-          <div class="grid-3" style="display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 8px; align-items: flex-end">
-            <div class="field" style="margin: 0">
-              <label>道具名称</label>
-              <input v-model="newItem.name" class="input" placeholder="如：高级必杀" />
-            </div>
-            <div class="field" style="margin: 0">
-              <label>分类</label>
-              <select v-model="newItem.cat" class="select">
-                <option>道具</option>
-                <option>装备</option>
-                <option>消耗品</option>
-                <option>兽诀</option>
-                <option>宝石</option>
-                <option>宠装</option>
-                <option>其他</option>
-              </select>
-            </div>
-            <div class="field" style="margin: 0">
-              <label>参考单价(两)</label>
-              <input v-model.number="newItem.price" class="input num" type="number" placeholder="0" />
-            </div>
-            <button class="btn btn-secondary btn-sm" type="button" style="height: 32px" @click="addItem">
-              添加
-            </button>
-          </div>
-        </div>
-
-        <!-- 道具列表 Grid Cards -->
-        <div class="item-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; max-height: 320px; overflow-y: auto; margin-top: 6px">
-          <div v-if="!filteredItems.length" class="meta" style="grid-column: 1 / -1; padding: 20px; text-align: center">
-            无匹配道具
-          </div>
-          <div
-            v-for="it in filteredItems"
-            :key="it.name"
-            class="item-card-row"
-            style="display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; font-size: 12px"
-          >
-            <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap">
-              <b>{{ it.name }}</b>
-              <span class="chip" style="font-size: 10px; margin-left: 6px; padding: 1px 4px; border-radius: 3px; background: var(--surface)">{{ it.cat }}</span>
-            </div>
-
-            <div class="row" style="gap: 6px; align-items: center">
-              <input
-                type="number"
-                class="input num"
-                style="width: 80px; padding: 2px 4px; font-size: 11px; text-align: right"
-                :value="it.price"
-                @change="store.updateItemPrice(it.name, Number(($event.target as HTMLInputElement).value))"
-                title="修改参考单价"
-              />
-              <button class="btn btn-ghost btn-sm" type="button" style="padding: 2px 4px; color: var(--danger)" @click="store.removeItem(it.name)">
-                ✕
-              </button>
-            </div>
-          </div>
+          <router-link to="/items" class="btn btn-primary btn-sm">
+            前往【📦 道具库】菜单 ➔
+          </router-link>
         </div>
       </div>
 
@@ -938,14 +818,6 @@ const activeTab = ref<'account' | 'shortcut' | 'appearance' | 'ai' | 'advanced'>
         </div>
       </div>
     </div>
-
-    <!-- 批量导入道具 Modal -->
-    <ItemImportModal
-      :show="showImportModal"
-      :existing-names="store.items.map((i) => i.name)"
-      @close="showImportModal = false"
-      @import="handleBatchImport"
-    />
   </section>
 </template>
 
