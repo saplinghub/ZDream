@@ -28,6 +28,10 @@ let dragFrame = 0
 
 function onBallDown(e: MouseEvent) {
   if (e.button !== 0) return
+  const target = e.target as HTMLElement | null
+  if (target && target.closest('.shop-list, .shop-card, [draggable="true"], input, button, select, form, label')) {
+    return
+  }
   pressing.value = true
   isDragging.value = false
   winPosInit = false
@@ -103,9 +107,21 @@ async function restoreBallPos() {
   try {
     const raw = localStorage.getItem(BALL_POS_KEY)
     if (!raw) return
-    const { x, y } = JSON.parse(raw)
+    let { x, y } = JSON.parse(raw)
     const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow')
     const { PhysicalPosition } = await import('@tauri-apps/api/dpi')
+    const { currentMonitor } = await import('@tauri-apps/api/window')
+    const monitor = await currentMonitor()
+    if (monitor) {
+      const mw = monitor.size.width
+      const mh = monitor.size.height
+      // 防越界保护：如果坐标超出了显示器视口，重置为安全可视区域
+      if (x < 0 || y < 0 || x > mw - 40 || y > mh - 40) {
+        console.warn('[FloatView] 悬浮窗位置越界，自动重置至屏幕区域:', { x, y, mw, mh })
+        x = Math.max(50, mw - 400)
+        y = 100
+      }
+    }
     await getCurrentWebviewWindow().setPosition(new PhysicalPosition(Math.round(x), Math.round(y)))
   } catch { /* ignore */ }
 }
@@ -149,13 +165,44 @@ async function expandAndFocus() {
   }, 400)
 }
 
+const childRef = ref<any>(null)
 let unlistenOpen: (() => void) | null = null
+
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && !collapsed.value) {
+    if (childRef.value && typeof childRef.value.handleEsc === 'function') {
+      const handled = childRef.value.handleEsc()
+      if (handled) {
+        e.preventDefault()
+        return
+      }
+    }
+    e.preventDefault()
+    toggleCollapse()
+  }
+}
+
+function autoFocusInput() {
+  if (!collapsed.value && !activityStore.currentId) {
+    const el = document.querySelector<HTMLInputElement>('.f-item-input')
+    if (el && document.activeElement !== el) {
+      el.focus()
+    }
+  }
+}
 
 onMounted(async () => {
   forceTransparent()
   restoreBallPos()
-  // 预取窗口位置，拖拽时立即可用（避免 mousedown 后异步读取的延迟）
+  window.addEventListener('keydown', onKeydown)
+  window.addEventListener('mouseenter', autoFocusInput)
+  window.addEventListener('focus', autoFocusInput)
   if (isTauri()) {
+    try {
+      if (!collapsed.value) {
+        await setSize(PANEL_W, PANEL_H)
+      }
+    } catch { /* ignore */ }
     import('@tauri-apps/api/webviewWindow').then(async ({ getCurrentWebviewWindow }) => {
       try {
         const pos = await getCurrentWebviewWindow().outerPosition()
@@ -164,9 +211,7 @@ onMounted(async () => {
       } catch { /* ignore */ }
     })
   }
-  // 注意：不能监听 window.focus —— 用户点击小球聚焦时会误触发展开，导致无法拖拽
   window.addEventListener('blur', onBlur)
-  // 主窗口热键触发时收到通知 → 展开 + 聚焦（仅快捷键路径）
   if (isTauri()) {
     try {
       const { listen } = await import('@tauri-apps/api/event')
@@ -178,15 +223,14 @@ onMounted(async () => {
       console.warn('[FloatView] listen float:open-request failed:', e)
     }
   }
-  // 首次打开时聚焦输入框
   if (!collapsed.value) {
-    setTimeout(() => {
-      const el = document.querySelector<HTMLInputElement>('.f-item-input')
-      el?.focus()
-    }, 500)
+    setTimeout(autoFocusInput, 300)
   }
 })
 onUnmounted(() => {
+  window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('mouseenter', autoFocusInput)
+  window.removeEventListener('focus', autoFocusInput)
   window.removeEventListener('blur', onBlur)
   unlistenOpen?.()
 })
@@ -240,9 +284,9 @@ async function setWinLogicalPos(logicalX: number, logicalY: number, scale: numbe
   } catch { /* ignore */ }
 }
 
-// 面板宽高
+// 面板宽高 (固定协调比例)
 const PANEL_W = 360
-const PANEL_H = 500
+const PANEL_H = 520
 // 锚点：展开态面板的视觉中心
 const ANCHOR_X = Math.round(PANEL_W / 2)
 const ANCHOR_Y = Math.round(PANEL_H / 2)
@@ -321,15 +365,15 @@ async function toggleCollapse() {
       </div>
 
       <!-- 动态活动内容 -->
-      <component :is="activeFloatComponent" v-if="activeFloatComponent" />
+      <component :is="activeFloatComponent" ref="childRef" v-if="activeFloatComponent" />
 
-      <!-- 底部动态列表 -->
-      <div class="p-list p-evts">
-        <div class="p-label">动态</div>
+      <!-- 底部动态列表 (仅在默认记账模式下展示，统一展示最近操作与动态) -->
+      <div v-if="!activityStore.currentId" class="p-list p-evts">
+        <div class="p-label">最近动态</div>
         <div v-if="!events.length" class="muted" style="padding:12px;text-align:center">暂无动态</div>
         <div v-for="e in events" :key="e.id" class="p-ev" :class="`k-${e.kind}`">
           <span class="p-time">{{ fmtTimeShort(e.time) }}</span>
-          <span class="p-kind">{{ {in:'收入',out:'消耗',sys:'系统',cbg:'藏宝阁'}[e.kind] }}</span>
+          <span class="p-kind">{{ {in:'收入',use:'消耗',sell:'卖出',out:'支出',sys:'系统',cbg:'藏宝阁'}[e.kind] || e.kind }}</span>
           <span class="p-text">{{ e.text }}</span>
         </div>
       </div>
@@ -342,8 +386,11 @@ async function toggleCollapse() {
 html, body, #app {
   margin: 0 !important;
   padding: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
   background: transparent !important;
   overflow: hidden !important;
+  box-sizing: border-box !important;
 }
 
 /* ─── 展开/收起过渡动画 ─── */
@@ -368,7 +415,7 @@ html, body, #app {
 <style>
 /* ─── 面板共用样式（unscoped，供 DefaultFloat 等子组件使用）─── */
 .panel {
-  display: flex; flex-direction: column; height: 100vh;
+  display: flex; flex-direction: column; height: 100vh; width: 100%; box-sizing: border-box;
   background: var(--surface); color: var(--fg); font-size: 13px;
   overflow: hidden;
   border-radius: 14px;
@@ -427,11 +474,11 @@ html, body, #app {
 .p-dur { color: var(--muted); font-size: 9px; }
 .muted { color: var(--muted); font-size: 11px; }
 
-.p-record { padding: 8px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.p-record { padding: 8px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0; width: 100%; box-sizing: border-box; }
 .p-input {
-  width: 100%; padding: 8px 12px; border: 1.5px solid var(--border); border-radius: 8px;
-  background: var(--surface); color: var(--fg); font-size: 15px; font-weight: 600;
-  text-align: center; outline: none; margin-bottom: 6px;
+  width: 100%; box-sizing: border-box; padding: 8px 12px; border: 1.5px solid var(--border); border-radius: 8px;
+  background: var(--surface); color: var(--fg); font-size: 13px; font-weight: 600;
+  text-align: left; outline: none; margin-bottom: 0;
 }
 .p-input:focus { border-color: var(--accent); }
 .p-row { display: flex; gap: 5px; align-items: center; }
@@ -446,7 +493,8 @@ html, body, #app {
 .p-fb { text-align: center; color: var(--accent); font-weight: 600; font-size: 12px; margin-top: 4px; }
 
 .p-list { border-bottom: 1px solid var(--border); padding: 4px 0; flex-shrink: 0; }
-.p-evts { flex:1; overflow-y:auto; border-bottom:none; }
+.p-evts { flex:1; overflow-y:auto; border-bottom:none; scrollbar-width: none !important; -ms-overflow-style: none !important; }
+.p-evts::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
 .p-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 0 10px; margin-bottom: 2px; }
 .p-ev { display: flex; align-items: center; gap: 6px; padding: 3px 10px; border: none; background: none; color: var(--fg); cursor: pointer; font-size: 11px; text-align: left; width:100%; }
 .p-ev:hover { background: color-mix(in oklch, var(--fg) 3%, transparent); }
@@ -455,14 +503,16 @@ html, body, #app {
 .p-amt.up { color: var(--accent); } .p-amt.dn { color: var(--danger); }
 .p-tag { font-size: 10px; } .p-text { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px; }
 .p-kind { font-size: 9px; padding: 0 4px; border-radius: 3px; }
-.k-in .p-kind  { background: color-mix(in oklch, var(--accent) 15%, transparent); color: var(--accent); }
-.k-out .p-kind { background: color-mix(in oklch, var(--danger) 12%, transparent); color: var(--danger); }
-.k-cbg .p-kind { background: color-mix(in oklch, #6c5ce7 12%, transparent); color: #a29bfe; }
-.k-sys .p-kind { color: var(--muted); }
+.k-in .p-kind   { background: color-mix(in oklch, var(--accent) 15%, transparent); color: var(--accent); }
+.k-use .p-kind  { background: color-mix(in oklch, var(--danger) 15%, transparent); color: var(--danger); }
+.k-sell .p-kind { background: color-mix(in oklch, #f59e0b 15%, transparent); color: #f59e0b; }
+.k-out .p-kind  { background: color-mix(in oklch, var(--danger) 12%, transparent); color: var(--danger); }
+.k-cbg .p-kind  { background: color-mix(in oklch, #6c5ce7 12%, transparent); color: #a29bfe; }
+.k-sys .p-kind  { color: var(--muted); }
 
-/* DefaultFloat 活动内容容器 */
+/* DefaultFloat 活动内容容器（按内容自适应高度，防止把下方最近动态挤留白） */
 .df-body {
-  flex: 1; overflow-y: auto;
+  flex-shrink: 0;
 }
 </style>
 

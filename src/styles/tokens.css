@@ -1,3 +1,14 @@
+/* 全局隐藏任何视口与元素里的可见滚动条（完全保留鼠标滚轮滑动功能） */
+* {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+*::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
 :root {
   --bg: oklch(97.2% 0.014 150);
   --surface: oklch(99.4% 0.004 150);

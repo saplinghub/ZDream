@@ -20,8 +20,15 @@ export async function openFloat(): Promise<void> {
   const existing = all.find((w) => w.label === FLOAT_WINDOW)
   if (existing) {
     try { await existing.setVisibleOnAllWorkspaces(true) } catch { /* 非 macOS 不支持 */ }
+    try { await existing.unminimize() } catch { /* ignore */ }
+    try {
+      const { LogicalSize } = await import('@tauri-apps/api/dpi')
+      await existing.setSize(new LogicalSize(360, 520))
+    } catch { /* ignore */ }
     await existing.show()
     await existing.setFocus()
+    const { emit } = await import('@tauri-apps/api/event')
+    await emit('float:open-request')
     return
   }
   // fallback: Rust 未预创建则动态创建
@@ -30,7 +37,7 @@ export async function openFloat(): Promise<void> {
     url: floatUrl('/float'),
     title: '梦金囊',
     width: 360,
-    height: 500,
+    height: 520,
     minWidth: 48,
     minHeight: 48,
     resizable: false,

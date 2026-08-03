@@ -21,6 +21,7 @@ import {
   seedTemplates,
 } from '@/data/seed'
 import { loadJson, saveJson } from '@/utils/storage'
+import { isTauri } from '@/platform/desktop'
 import {
   daysAgo,
   fmtDur,
@@ -48,8 +49,8 @@ const STORAGE = {
 } as const
 
 function persistableAccounts(list: Account[]): Account[] {
-  // 刷新后默认全部离线，避免计时错乱；保留 last 标记
-  return list.map((a) => ({ ...a, online: false, since: null }))
+  // 保持真实的上线状态，确保多窗口（主窗口、悬浮窗）状态完全同步联动
+  return list.map((a) => ({ ...a }))
 }
 
 export const useAppStore = defineStore('app', () => {
@@ -59,6 +60,42 @@ export const useAppStore = defineStore('app', () => {
   const accounts = ref<Account[]>(
     bootstrapped ? loadJson(STORAGE.accounts, seedAccounts) : structuredClone(seedAccounts),
   )
+
+  // 跨窗口多进程透传广播（Tauri IPC + Storage Event 物理级双向通信）
+  function syncRemoteAccounts(freshAccounts: Account[]) {
+    if (!Array.isArray(freshAccounts)) return
+    accounts.value = freshAccounts.map((a) => ({ ...a }))
+  }
+
+  function broadcastAccountState() {
+    saveJson(STORAGE.accounts, persistableAccounts(accounts.value))
+    if (isTauri()) {
+      import('@tauri-apps/api/event').then(({ emit }) => {
+        emit('app-online-accounts-changed', accounts.value)
+      }).catch(() => {})
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('storage', (e) => {
+      if (e.key === STORAGE.accounts && e.newValue) {
+        try {
+          syncRemoteAccounts(JSON.parse(e.newValue))
+        } catch { /* ignore */ }
+      }
+    })
+
+    if (isTauri()) {
+      import('@tauri-apps/api/event').then(({ listen }) => {
+        listen<Account[]>('app-online-accounts-changed', (event) => {
+          if (event.payload) {
+            syncRemoteAccounts(event.payload)
+          }
+        }).catch(() => {})
+      }).catch(() => {})
+    }
+  }
+
   const items = ref<ItemDict[]>(
     bootstrapped ? loadJson(STORAGE.items, seedItems) : structuredClone(seedItems),
   )
@@ -74,6 +111,18 @@ export const useAppStore = defineStore('app', () => {
   const sessions = ref<SessionLog[]>(bootstrapped ? loadJson(STORAGE.sessions, []) : [])
   const events = ref<LiveEvent[]>(bootstrapped ? loadJson(STORAGE.events, []) : [])
 
+  // 跨窗口同步监听 (主窗口与悬浮窗在不同 Webview 进程中运行，通过 storage 事件实时透传在线状态)
+  if (typeof window !== 'undefined') {
+    window.addEventListener('storage', (e) => {
+      if (e.key === STORAGE.accounts && e.newValue) {
+        try {
+          const freshAccounts = JSON.parse(e.newValue)
+          accounts.value = freshAccounts
+        } catch { /* ignore */ }
+      }
+    })
+  }
+
   const baseSettings = bootstrapped
     ? loadJson(STORAGE.settings, seedSettings)
     : structuredClone(seedSettings)
@@ -81,7 +130,8 @@ export const useAppStore = defineStore('app', () => {
   baseSettings.customHex = storedTheme.customHex
   // 旧版兼容：无此字段默认 true
   if (baseSettings.autoOpenFloat === undefined) baseSettings.autoOpenFloat = true
-  if (baseSettings.ocrHotkey === undefined) baseSettings.ocrHotkey = 'Ctrl+Shift+S'
+  if (baseSettings.hotkey === undefined || baseSettings.hotkey === 'Ctrl+Shift+R') baseSettings.hotkey = 'Ctrl+`'
+  if (baseSettings.ocrHotkey === undefined || baseSettings.ocrHotkey === 'Ctrl+Shift+S') baseSettings.ocrHotkey = 'Ctrl+A'
   if (baseSettings.baiduApiKey === undefined) baseSettings.baiduApiKey = ''
   if (baseSettings.baiduSecretKey === undefined) baseSettings.baiduSecretKey = ''
   if (baseSettings.logLevel === undefined) baseSettings.logLevel = 'info'
@@ -234,6 +284,7 @@ export const useAppStore = defineStore('app', () => {
     })
     sessionStarted.value = true
     showOnlineModal.value = false
+    broadcastAccountState()
     if (ids.length) toast(`已上线 ${ids.length} 个账号`)
     else toast('已进入离线模式')
   }
@@ -241,6 +292,7 @@ export const useAppStore = defineStore('app', () => {
   function skipOnline() {
     sessionStarted.value = true
     showOnlineModal.value = false
+    broadcastAccountState()
     toast('暂不上线 · 离线模式')
   }
 
@@ -260,6 +312,7 @@ export const useAppStore = defineStore('app', () => {
       pushEvent('sys', `${a.name} 上线`, a.name)
       toast(`${a.name} 已上线`)
     }
+    broadcastAccountState()
   }
 
   function endAccountSession(a: Account) {
@@ -330,6 +383,7 @@ export const useAppStore = defineStore('app', () => {
       since: null,
       last: false,
     })
+    broadcastAccountState()
     toast('已添加账号')
   }
 
@@ -337,6 +391,7 @@ export const useAppStore = defineStore('app', () => {
     const i = accounts.value.findIndex((a) => a.id === id)
     if (i >= 0) {
       accounts.value.splice(i, 1)
+      broadcastAccountState()
       toast('已删除账号')
     }
   }

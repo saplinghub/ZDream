@@ -129,7 +129,7 @@ export interface SessionLog {
 export interface LiveEvent {
   id: string
   time: string
-  kind: 'in' | 'out' | 'sys' | 'cbg'
+  kind: 'in' | 'out' | 'use' | 'sell' | 'sys' | 'cbg'
   text: string
   accountName?: string
 }

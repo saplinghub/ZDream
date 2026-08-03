@@ -57,6 +57,19 @@ watch(() => store.settings.hotkey, (newKey, oldKey) => {
   }
 })
 
+watch(() => store.settings.ocrHotkey, (newKey, oldKey) => {
+  if (isAuxChrome.value) return
+  if (oldKey && oldKey !== newKey) {
+    unregisterGlobalShortcut(oldKey)
+  }
+  if (newKey) {
+    registerGlobalShortcut(newKey, () => {
+      logger.info('hotkey', 'OCR 截图快捷键触发')
+      runOcrCapture()
+    })
+  }
+})
+
 onMounted(() => {
   window.addEventListener('keydown', onKey)
   // 主窗口监听截图选区结果（从 capture 窗口发回）
@@ -81,9 +94,9 @@ onMounted(() => {
   // 只有主窗口注册全局快捷键 + 双击 Shift
   if (!isAuxChrome.value) {
     applyDesktopChrome()
-    registerGlobalHotkey(store.settings.hotkey || 'Ctrl+Shift+R')
+    registerGlobalHotkey(store.settings.hotkey || 'Ctrl+`')
     // OCR 截图快捷键
-    registerGlobalShortcut(store.settings.ocrHotkey || 'Ctrl+Shift+S', () => {
+    registerGlobalShortcut(store.settings.ocrHotkey || 'Ctrl+A', () => {
       logger.info('hotkey', 'OCR 截图快捷键触发')
       runOcrCapture()
     })
@@ -105,8 +118,8 @@ onUnmounted(() => {
   window.removeEventListener('keydown', onKey)
   removeDoubleShift?.()
   if (!isAuxChrome.value) {
-    unregisterGlobalHotkey(store.settings.hotkey || 'Ctrl+Shift+R')
-    unregisterGlobalShortcut(store.settings.ocrHotkey || 'Ctrl+Shift+S')
+    unregisterGlobalHotkey(store.settings.hotkey || 'Ctrl+`')
+    unregisterGlobalShortcut(store.settings.ocrHotkey || 'Ctrl+A')
   }
 })
 </script>

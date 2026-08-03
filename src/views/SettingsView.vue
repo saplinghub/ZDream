@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { THEMES } from '@/theme/themes'
 import type { ItemCategory } from '@/types'
@@ -7,9 +7,24 @@ import { openTextFile } from '@/platform/desktop'
 import { useUpdateChecker } from '@/composables/useUpdateChecker'
 import { useOcrStore } from '@/stores/ocr'
 import { runOcrCapture } from '@/ocr/runner'
+import HotkeyRecorder from '@/components/ui/HotkeyRecorder.vue'
 
 const store = useAppStore()
 const ocr = useOcrStore()
+
+const hotkeyConflict = computed(() => {
+  if (store.settings.hotkey && store.settings.hotkey === store.settings.ocrHotkey) {
+    return '与【截图识别】设置了相同的快捷键，存在冲突！'
+  }
+  return ''
+})
+
+const ocrConflict = computed(() => {
+  if (store.settings.ocrHotkey && store.settings.ocrHotkey === store.settings.hotkey) {
+    return '与【唤出悬浮窗】设置了相同的快捷键，存在冲突！'
+  }
+  return ''
+})
 
 function runOcr() {
   runOcrCapture()
@@ -296,17 +311,29 @@ const activeTab = ref<'account' | 'shortcut' | 'appearance' | 'advanced'>('accou
       <div class="card settings-block stack">
         <h3>数据与快捷键</h3>
         <div class="field">
-          <label>全局唤出悬浮窗快捷键</label>
-          <input
+          <HotkeyRecorder
             v-model="store.settings.hotkey"
-            class="input"
-            placeholder="Ctrl+Shift+R"
-            style="max-width:220px"
+            label="全局唤出/展开悬浮窗快捷键"
+            placeholder="点击按键录入 (默认 Ctrl+`)..."
+            :conflict-msg="hotkeyConflict"
           />
           <div class="meta" style="font-size:11px;margin-top:4px">
-            支持 Ctrl / Alt / Shift / Super + 字母组合。另外，双击 Shift 键也可唤出（应用聚焦时）
+            点击录入框并按下快捷键组合（如 Ctrl+`）即可自动设置。另外，双击 Shift 键也可唤出（应用聚焦时）
           </div>
         </div>
+
+        <div class="field">
+          <HotkeyRecorder
+            v-model="store.settings.ocrHotkey"
+            label="全局截图识别快捷键 (OCR)"
+            placeholder="点击按键录入 (默认 Ctrl+A)..."
+            :conflict-msg="ocrConflict"
+          />
+          <div class="meta" style="font-size:11px;margin-top:4px">
+            点击录入框并按下快捷键组合（如 Ctrl+A）即可自动设置。
+          </div>
+        </div>
+
         <div class="field" style="margin-bottom: 10px">
           <label>数据存储目录（空白则使用默认 AppData 目录）</label>
           <div class="row" style="gap: 8px">
@@ -342,7 +369,7 @@ const activeTab = ref<'account' | 'shortcut' | 'appearance' | 'advanced'>('accou
           />
         </div>
         <div class="meta">
-          数据仅存本地（桌面 SQLite / 浏览器 localStorage）· 不上传云端 · Ctrl+Shift+R 快捷记账 · 动态可开独立悬浮窗
+          数据仅存本地（桌面 SQLite / 浏览器 localStorage）· 不上传云端 · 快捷记账 · 动态可开独立悬浮窗
         </div>
       </div>
     </div>
@@ -413,7 +440,7 @@ const activeTab = ref<'account' | 'shortcut' | 'appearance' | 'advanced'>('accou
       <div class="card settings-block stack">
         <div class="row-between">
           <h3>OCR 识别（截图）</h3>
-          <span class="meta" style="font-size: 12px">Ctrl+Shift+S 全局截图识别</span>
+          <span class="meta" style="font-size: 12px">快捷键: {{ store.settings.ocrHotkey || 'Ctrl+A' }}</span>
         </div>
         <div class="field">
           <label>百度 OCR API Key</label>

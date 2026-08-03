@@ -44,7 +44,7 @@ pub fn run() {
                     WebviewUrl::App("/#/float".into()),
                 )
                 .title("梦金囊")
-                .inner_size(360.0, 500.0)
+                .inner_size(360.0, 520.0)
                 .min_inner_size(48.0, 48.0)
                 .resizable(false)
                 .decorations(false)
