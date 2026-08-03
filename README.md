@@ -33,18 +33,22 @@ src-tauri/           壳 + SQLite 迁移
 docs/                需求与进度
 ```
 
+## 操作手册
+
+完整功能与快捷键使用指南请参见：📖 **[用户操作手册 (USER-MANUAL.md)](docs/USER-MANUAL.md)**。
+
 ## GitHub 发版
 
 https://github.com/saplinghub/ZDream
 
 1. push `main` → **CI Frontend**
-2. tag `v0.1.0` 并 push，或 Actions 里手动跑 **Release Tauri**
+2. tag `v0.2.1` 并 push，或 Actions 里手动跑 **Release Tauri**
 3. Releases 下载 Win / macOS 包（draft）
 
 详见 [docs/GITHUB-RELEASE-PLAN.md](docs/GITHUB-RELEASE-PLAN.md)。
 
 ## 说明
 
-- 已移除 ZTools 插件运行路径
-- 窗内快捷记账：`Ctrl+Shift+R`
-- 系统级全局快捷键 / 托盘：后续迭代
+- 窗内与全局唤出快捷键：`Ctrl+\``
+- 全局 OCR 截图识别快捷键：`Ctrl+A`
+- 双击 Shift 可快速唤出/收起悬浮窗
