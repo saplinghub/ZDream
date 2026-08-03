@@ -96,6 +96,7 @@ async function onImportNative() {
   }
   await importFromText(text)
 }
+const activeTab = ref<'account' | 'shortcut' | 'appearance' | 'advanced'>('account')
 </script>
 
 <template>
@@ -108,7 +109,43 @@ async function onImportNative() {
       </div>
     </div>
 
-    <div class="grid-2">
+    <div class="settings-tabs">
+      <button
+        type="button"
+        class="tab-btn"
+        :class="{ active: activeTab === 'account' }"
+        @click="activeTab = 'account'"
+      >
+        👤 账号与模板
+      </button>
+      <button
+        type="button"
+        class="tab-btn"
+        :class="{ active: activeTab === 'shortcut' }"
+        @click="activeTab = 'shortcut'"
+      >
+        ⚙️ 应用与快捷键
+      </button>
+      <button
+        type="button"
+        class="tab-btn"
+        :class="{ active: activeTab === 'appearance' }"
+        @click="activeTab = 'appearance'"
+      >
+        🎨 外观与费率
+      </button>
+      <button
+        type="button"
+        class="tab-btn"
+        :class="{ active: activeTab === 'advanced' }"
+        @click="activeTab = 'advanced'"
+      >
+        🤖 OCR 与更新
+      </button>
+    </div>
+
+    <!-- 1. 账号与模板 -->
+    <div v-if="activeTab === 'account'" class="grid-2">
       <div class="card settings-block">
         <div class="row-between">
           <h3>账号管理</h3>
@@ -252,7 +289,66 @@ async function onImportNative() {
           <option v-for="it in store.items" :key="it.name" :value="it.name" />
         </datalist>
       </div>
+    </div>
 
+    <!-- 2. 应用与快捷键 -->
+    <div v-if="activeTab === 'shortcut'" class="stack" style="gap: 16px">
+      <div class="card settings-block stack">
+        <h3>数据与快捷键</h3>
+        <div class="field">
+          <label>全局唤出悬浮窗快捷键</label>
+          <input
+            v-model="store.settings.hotkey"
+            class="input"
+            placeholder="Ctrl+Shift+R"
+            style="max-width:220px"
+          />
+          <div class="meta" style="font-size:11px;margin-top:4px">
+            支持 Ctrl / Alt / Shift / Super + 字母组合。另外，双击 Shift 键也可唤出（应用聚焦时）
+          </div>
+        </div>
+        <div class="field" style="margin-bottom: 10px">
+          <label>数据存储目录（空白则使用默认 AppData 目录）</label>
+          <div class="row" style="gap: 8px">
+            <input v-model="store.settings.dataDir" class="input" placeholder="D:\ZDream\data" style="flex:1" />
+          </div>
+          <div class="meta" style="font-size: 11px">
+            截图等资源文件将存于此目录。修改后需重启生效。
+          </div>
+        </div>
+
+        <div class="field">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input
+              type="checkbox"
+              :checked="store.settings.autoOpenFloat"
+              @change="store.settings.autoOpenFloat = ($event.target as HTMLInputElement).checked"
+              style="width:16px;height:16px;cursor:pointer"
+            />
+            启动时自动打开悬浮球
+          </label>
+        </div>
+
+        <div class="row" style="gap: 8px; flex-wrap: wrap">
+          <button class="btn btn-secondary btn-sm" type="button" @click="store.exportJson">导出 JSON</button>
+          <button class="btn btn-secondary btn-sm" type="button" @click="store.exportCsv">导出 CSV</button>
+          <button class="btn btn-secondary btn-sm" type="button" @click="onImportNative">导入 JSON</button>
+          <input
+            ref="fileInput"
+            type="file"
+            accept="application/json,.json"
+            hidden
+            @change="onImport"
+          />
+        </div>
+        <div class="meta">
+          数据仅存本地（桌面 SQLite / 浏览器 localStorage）· 不上传云端 · Ctrl+Shift+R 快捷记账 · 动态可开独立悬浮窗
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. 外观与费率 -->
+    <div v-if="activeTab === 'appearance'" class="grid-2">
       <div class="card settings-block stack">
         <h3>外观配色</h3>
         <p class="meta" style="margin: 0 0 8px">预设一键切换 · 也可自定义主色，即时生效并记住</p>
@@ -309,62 +405,12 @@ async function onImportNative() {
         </div>
         <button class="btn btn-secondary btn-sm" type="button" @click="saveFee">保存配置</button>
       </div>
+    </div>
 
-      <div class="card settings-block stack" style="grid-column: 1 / -1">
-        <h3>数据与快捷键</h3>
-        <div class="field">
-          <label>全局唤出悬浮窗快捷键</label>
-          <input
-            v-model="store.settings.hotkey"
-            class="input"
-            placeholder="Ctrl+Shift+R"
-            style="max-width:220px"
-          />
-          <div class="meta" style="font-size:11px;margin-top:4px">
-            支持 Ctrl / Alt / Shift / Super + 字母组合。另外，双击 Shift 键也可唤出（应用聚焦时）
-          </div>
-        </div>
-        <div class="field" style="margin-bottom: 10px">
-          <label>数据存储目录（空白则使用默认 AppData 目录）</label>
-          <div class="row" style="gap: 8px">
-            <input v-model="store.settings.dataDir" class="input" placeholder="D:\ZDream\data" style="flex:1" />
-          </div>
-          <div class="meta" style="font-size: 11px">
-            截图等资源文件将存于此目录。修改后需重启生效。
-          </div>
-        </div>
-
-        <div class="field">
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-            <input
-              type="checkbox"
-              :checked="store.settings.autoOpenFloat"
-              @change="store.settings.autoOpenFloat = ($event.target as HTMLInputElement).checked"
-              style="width:16px;height:16px;cursor:pointer"
-            />
-            启动时自动打开悬浮球
-          </label>
-        </div>
-
-        <div class="row" style="gap: 8px; flex-wrap: wrap">
-          <button class="btn btn-secondary btn-sm" type="button" @click="store.exportJson">导出 JSON</button>
-          <button class="btn btn-secondary btn-sm" type="button" @click="store.exportCsv">导出 CSV</button>
-          <button class="btn btn-secondary btn-sm" type="button" @click="onImportNative">导入 JSON</button>
-          <input
-            ref="fileInput"
-            type="file"
-            accept="application/json,.json"
-            hidden
-            @change="onImport"
-          />
-        </div>
-        <div class="meta">
-          数据仅存本地（桌面 SQLite / 浏览器 localStorage）· 不上传云端 · Ctrl+Shift+R 快捷记账 · 动态可开独立悬浮窗
-        </div>
-      </div>
-
+    <!-- 4. OCR 与更新 -->
+    <div v-if="activeTab === 'advanced'" class="stack" style="gap: 16px">
       <!-- OCR 识别 -->
-      <div class="card settings-block stack" style="grid-column: 1 / -1">
+      <div class="card settings-block stack">
         <div class="row-between">
           <h3>OCR 识别（截图）</h3>
           <span class="meta" style="font-size: 12px">Ctrl+Shift+S 全局截图识别</span>
@@ -617,3 +663,34 @@ async function onImportNative() {
     </div>
   </section>
 </template>
+
+<style scoped>
+.settings-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+}
+.tab-btn {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.tab-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.tab-btn.active {
+  background: color-mix(in oklch, var(--accent) 15%, var(--surface));
+  color: var(--accent);
+  border-color: color-mix(in oklch, var(--accent) 40%, transparent);
+  font-weight: 600;
+}
+</style>
