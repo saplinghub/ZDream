@@ -203,7 +203,16 @@ function flash(msg: string) {
   }, 1800)
 }
 
+import { useOcrStore } from '@/stores/ocr'
+import { useActivityContextStore } from '@/stores/activityContext'
+const ocrStore = useOcrStore()
+const activityCtx = useActivityContextStore()
+
 function handleEsc(): boolean {
+  if (ocrStore.result || ocrStore.showAiModal || ocrStore.capturedImgUrl) {
+    ocrStore.clear()
+    return true
+  }
   if (step.value === 'details') {
     resetAll()
     return true
@@ -292,7 +301,7 @@ defineExpose({ focusInput, handleEsc })
       <div v-if="step === 'search'" class="search-card">
         <div class="search-card-head">
           <span class="search-card-title">🔍 快捷检索与记账</span>
-          <span class="search-card-tip">按 ↓↑ 移动，回车 ↵ 确认</span>
+          <span class="search-card-tip">🎯 {{ activityCtx.currentContext.name }}</span>
         </div>
 
         <input

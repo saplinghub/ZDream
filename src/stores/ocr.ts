@@ -29,6 +29,8 @@ export const useOcrStore = defineStore('ocr', () => {
   function clear() {
     result.value = null
     error.value = ''
+    capturedImgUrl.value = ''
+    showAiModal.value = false
   }
   function startSelecting(b64: string) {
     screenshot.value = b64

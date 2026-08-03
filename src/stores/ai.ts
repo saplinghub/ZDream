@@ -222,29 +222,36 @@ export const useAiStore = defineStore('ai', () => {
   }
 
   /** 分析 OCR 出来的文本意图并结构化提取记账信息 */
-  async function analyzeIntentAndExtract(ocrLines: string[]): Promise<AiAnalysisResult | null> {
+  async function analyzeIntentAndExtract(ocrLines: string[], activityContextText?: string): Promise<AiAnalysisResult | null> {
     if (!ocrLines.length || !isActive.value) return null
 
     const text = ocrLines.join('\n')
-    logger.info('ai', `发起 AI 意图分析 (思考模式:${settings.value.enableReasoning})，包含 ${ocrLines.length} 行文本`)
+    logger.info('ai', `发起 AI 意图分析 (思考模式:${settings.value.enableReasoning})，包含 ${ocrLines.length} 行文本，玩法上下文: [${activityContextText || '通用'}]`)
 
     const reasoningInstruction = settings.value.enableReasoning
-      ? `包含 "reasoning" 字段，详细阐述你的思考推导逻辑（例如：分析到包含关键字“摆摊”和“金柳露5个”，推导出为卖出收益，按字典计算总价60万）。`
+      ? `包含 "reasoning" 字段，详细阐述你的思考推导逻辑（例如：结合玩家正在做师门买物品的上下文，推导出为师门消耗，归集至当前师门角色...）。`
       : `无需包含 reasoning 字段。`
 
+    const contextInstruction = activityContextText
+      ? `【当前玩家游玩的玩法上下文环境】：${activityContextText}
+请务必深度结合上述玩法上下文解读用户的截图意图！如处于师门任务，买物品/寻物优先推断为师门消耗并关联该角色；如处于抓鬼/副本，掉落奖励优先归集为副本得产。`
+      : `【玩法上下文】：日常通用模式。`
+
     const systemPrompt = `你是一个专为《梦幻西游》多开财务记账助手服务的 AI 思考分析引擎。
-你的任务是从用户框选截屏识别出的文本中，分析用户的操作意图，并提取出结构化的游戏财务交易记录。
+你的任务是从用户框选截屏识别出的文本中，结合玩家当前进行的游戏玩法上下文，分析用户的操作意图，并提取出结构化的游戏财务交易记录。
+
+${contextInstruction}
 
 请严格输出且仅输出符合以下 JSON 格式的数据（不要包含任何 markdown 代码块标记，不要包含其他文字）：
 {
-  "intentSummary": "一句话简述识别到的意图（例如：识别为摆摊卖出5个金柳露，获得60万梦幻币）",
-  "reasoning": "思考推导过程说明",
+  "intentSummary": "一句话简述识别到的意图（例如：识别为师门购买5个金柳露，计为师门消耗）",
+  "reasoning": "结合玩法上下文的思考推导过程说明",
   "item": "物品或事项名称（例如：金柳露、月卡、师门收益、高级魔兽要诀）",
   "qty": 1,
   "price": 120000,
   "totalAmount": 120000,
   "io": "in",
-  "sub": "摆摊",
+  "sub": "师门",
   "suggestedAccountName": ""
 }
 

@@ -103,6 +103,10 @@ onMounted(() => {
           raw?: unknown
           capturedImgUrl?: string
         }
+
+        // 截图识别完成：首先清理历史状态
+        ocrStore.clear()
+
         if (payload.ok) {
           ocrStore.setResult({
             lines: payload.lines || [],
@@ -115,6 +119,9 @@ onMounted(() => {
           ocrStore.setError(payload.error || '未知错误')
           ocrStore.capturedImgUrl = ''
         }
+
+        // 自动展开/呼出悬浮球窗口
+        import('@/composables/useGlobalHotkey').then((m) => m.triggerFloatOpen())
         ocrStore.showAiModal = true
       })
     })

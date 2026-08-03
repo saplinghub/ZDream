@@ -5,6 +5,8 @@ import { useActivityStore } from '@/stores/activity'
 import { useMasterQuestStore, type ShopType } from '@/stores/masterQuest'
 import { useOnlineAccounts } from '@/composables/useOnlineAccounts'
 
+import { useOcrStore } from '@/stores/ocr'
+
 const appStore = useAppStore()
 const activityStore = useActivityStore()
 const mqStore = useMasterQuestStore()
@@ -145,6 +147,11 @@ function exitMode() {
 }
 
 function handleEsc(): boolean {
+  const ocr = useOcrStore()
+  if (ocr.result || ocr.showAiModal || ocr.capturedImgUrl) {
+    ocr.clear()
+    return true
+  }
   if (showAddShop.value) {
     showAddShop.value = false
     return true

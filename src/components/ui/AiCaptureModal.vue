@@ -2,6 +2,7 @@
 import { computed, reactive, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { useAiStore, type AiAnalysisResult } from '@/stores/ai'
+import { useActivityContextStore } from '@/stores/activityContext'
 import { fmtMhAsset } from '@/utils/format'
 
 const props = defineProps<{
@@ -18,6 +19,7 @@ const emit = defineEmits<{
 
 const store = useAppStore()
 const ai = useAiStore()
+const activityStore = useActivityContextStore()
 
 type ProcessStatus = 'ocr' | 'ai' | 'done' | 'error'
 const currentStatus = reactive<{
@@ -67,11 +69,11 @@ watch(
       return
     }
 
-    // 第一步：OCR 识别完成，第二步：发给 AI
+    // 第一步：OCR 识别完成，第二步：发给 AI（结合当前玩法上下文）
     currentStatus.stage = 'ai'
-    currentStatus.msg = '🧠 AI 正在思考分析交易意图与物品价格...'
+    currentStatus.msg = `🧠 AI 正在结合上下文 [${activityStore.currentContext.name}] 分析意图...`
 
-    const res = await ai.analyzeIntentAndExtract(props.ocrLines)
+    const res = await ai.analyzeIntentAndExtract(props.ocrLines, activityStore.promptContextText)
 
     if (res) {
       currentStatus.stage = 'done'
