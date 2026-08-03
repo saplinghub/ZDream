@@ -178,6 +178,15 @@ function submitRecord() {
           <span class="intent-text">{{ currentStatus.aiResult.intentSummary }}</span>
         </div>
 
+        <!-- AI 思考推导逻辑 (思考模式) -->
+        <div
+          v-if="currentStatus.aiResult?.reasoning"
+          style="padding: 8px 12px; background: var(--bg); border-radius: 8px; border-left: 3px solid var(--warn); font-size: 11px; color: var(--muted)"
+        >
+          <div style="font-weight: 600; margin-bottom: 2px; color: var(--text)">🧠 AI 深度思考推导逻辑:</div>
+          <div style="white-space: pre-line; line-height: 1.4">{{ currentStatus.aiResult.reasoning }}</div>
+        </div>
+
         <div class="form-grid">
           <div class="field">
             <label>归集账号</label>

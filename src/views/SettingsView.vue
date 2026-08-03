@@ -113,7 +113,7 @@ async function onImportNative() {
   }
   await importFromText(text)
 }
-const activeTab = ref<'account' | 'shortcut' | 'appearance' | 'advanced'>('account')
+const activeTab = ref<'account' | 'shortcut' | 'appearance' | 'ai' | 'advanced'>('account')
 </script>
 
 <template>
@@ -133,7 +133,7 @@ const activeTab = ref<'account' | 'shortcut' | 'appearance' | 'advanced'>('accou
         :class="{ active: activeTab === 'account' }"
         @click="activeTab = 'account'"
       >
-        👤 账号与模板
+        👤 账号与字典
       </button>
       <button
         type="button"
@@ -154,10 +154,18 @@ const activeTab = ref<'account' | 'shortcut' | 'appearance' | 'advanced'>('accou
       <button
         type="button"
         class="tab-btn"
+        :class="{ active: activeTab === 'ai' }"
+        @click="activeTab = 'ai'"
+      >
+        🤖 OCR 与 AI 配置
+      </button>
+      <button
+        type="button"
+        class="tab-btn"
         :class="{ active: activeTab === 'advanced' }"
         @click="activeTab = 'advanced'"
       >
-        🤖 OCR 与更新
+        🚀 版本与项目信息
       </button>
     </div>
 
@@ -436,51 +444,22 @@ const activeTab = ref<'account' | 'shortcut' | 'appearance' | 'advanced'>('accou
       </div>
     </div>
 
-    <!-- 4. OCR 与更新 -->
-    <div v-if="activeTab === 'advanced'" class="stack" style="gap: 16px">
-      <!-- OCR 识别 -->
-      <div class="card settings-block stack">
-        <div class="row-between">
-          <h3>OCR 识别（截图）</h3>
-          <span class="meta" style="font-size: 12px">快捷键: {{ store.settings.ocrHotkey || 'Ctrl+A' }}</span>
-        </div>
-        <div class="field">
-          <label>百度 OCR API Key</label>
+    <!-- 4. OCR 与 AI 配置 -->
+    <div v-if="activeTab === 'ai'" class="stack" style="gap: 16px">
+      <!-- 生效 AI 状态全局 Banner -->
+      <div
+        class="card"
+        style="padding: 12px 16px; font-size: 13px; font-weight: 600; background: var(--bg); border-left: 4px solid var(--accent); display: flex; justify-content: space-between; align-items: center"
+      >
+        <span>{{ ai.activeBadgeText }}</span>
+        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px">
           <input
-            v-model="store.settings.baiduApiKey"
-            class="input"
-            placeholder="百度智能云控制台获取"
-            autocomplete="off"
+            type="checkbox"
+            v-model="ai.settings.enabled"
+            style="width: 15px; height: 15px; cursor: pointer"
           />
-        </div>
-        <div class="field">
-          <label>百度 OCR Secret Key</label>
-          <input
-            v-model="store.settings.baiduSecretKey"
-            class="input"
-            type="password"
-            placeholder="百度智能云控制台获取"
-            autocomplete="off"
-          />
-        </div>
-        <div class="row" style="gap: 8px">
-          <button class="btn btn-secondary btn-sm" type="button" :disabled="ocr.capturing" @click="runOcr">
-            {{ ocr.capturing ? '识别中...' : '立即截图识别' }}
-          </button>
-          <span v-if="!store.settings.baiduApiKey || !store.settings.baiduSecretKey" class="meta" style="color: var(--warn)">
-            需先填写 Key 才能识别
-          </span>
-        </div>
-        <div v-if="ocr.error" class="meta" style="color: var(--danger); margin-top: 6px">
-          {{ ocr.error }}
-        </div>
-        <div v-if="ocr.result" class="meta" style="margin-top: 6px; max-height: 140px; overflow: auto; background: var(--bg); padding: 8px; border-radius: 6px; font-size: 12px">
-          <div style="font-weight: 600; margin-bottom: 4px">识别结果（{{ ocr.result.lines.length }} 行）</div>
-          <div v-for="(l, i) in ocr.result.lines" :key="i">{{ l }}</div>
-        </div>
-        <div class="meta" style="font-size: 11px; margin-top: 6px">
-          免费版每天 500 次高精度识别。Key 只存本地，不上传。
-        </div>
+          启用 AI 分析引擎
+        </label>
       </div>
 
       <!-- AI 大模型配置 -->
@@ -527,14 +506,49 @@ const activeTab = ref<'account' | 'shortcut' | 'appearance' | 'advanced'>('accou
           />
         </div>
 
+        <!-- 模型名称 & 获取模型列表 -->
         <div class="field">
-          <label>模型名称 (Model)</label>
+          <div class="row-between" style="margin-bottom: 4px">
+            <label>模型名称 (Model)</label>
+            <button
+              class="btn btn-ghost btn-sm"
+              type="button"
+              style="font-size: 11px; padding: 2px 6px"
+              :disabled="ai.fetchingModels"
+              @click="ai.fetchModelList()"
+            >
+              {{ ai.fetchingModels ? '拉取中...' : '🔄 获取模型列表' }}
+            </button>
+          </div>
+          <div v-if="ai.fetchedModels.length" style="margin-bottom: 6px">
+            <select v-model="ai.settings.model" class="select">
+              <option v-for="m in ai.fetchedModels" :key="m" :value="m">{{ m }}</option>
+            </select>
+          </div>
           <input
             v-model="ai.settings.model"
             class="input"
-            placeholder="deepseek-chat / gpt-4o-mini / qwen2.5:7b"
+            placeholder="deepseek-chat / deepseek-reasoner / gpt-4o-mini / qwen2.5:7b"
             autocomplete="off"
           />
+          <div v-if="ai.fetchModelsError" style="color: var(--danger); font-size: 11px; margin-top: 4px">
+            {{ ai.fetchModelsError }}
+          </div>
+        </div>
+
+        <!-- 思考模式开关 -->
+        <div class="field">
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer">
+            <input
+              type="checkbox"
+              v-model="ai.settings.enableReasoning"
+              style="width: 16px; height: 16px; cursor: pointer"
+            />
+            开启深度思考推导模式 (Chain-of-thought)
+          </label>
+          <div class="meta" style="font-size: 11px; margin-top: 4px">
+            开启后将在 AI 确认弹窗中展示详细推导步骤（兼容 DeepSeek Reasoner、OpenAI CoT 逻辑）。
+          </div>
         </div>
 
         <div class="row" style="gap: 8px; align-items: center">
@@ -559,14 +573,81 @@ const activeTab = ref<'account' | 'shortcut' | 'appearance' | 'advanced'>('accou
         </div>
       </div>
 
-      <!-- 版本更新 -->
-      <div class="card settings-block stack" style="grid-column: 1 / -1">
+      <!-- OCR 识别 -->
+      <div class="card settings-block stack">
         <div class="row-between">
-          <h3>版本更新</h3>
+          <h3>📷 OCR 文字识别 (百度 OCR)</h3>
+          <span class="meta" style="font-size: 12px">快捷键: {{ store.settings.ocrHotkey || 'Ctrl+A' }}</span>
+        </div>
+        <div class="field">
+          <label>百度 OCR API Key</label>
+          <input
+            v-model="store.settings.baiduApiKey"
+            class="input"
+            placeholder="百度智能云控制台获取"
+            autocomplete="off"
+          />
+        </div>
+        <div class="field">
+          <label>百度 OCR Secret Key</label>
+          <input
+            v-model="store.settings.baiduSecretKey"
+            class="input"
+            type="password"
+            placeholder="百度智能云控制台获取"
+            autocomplete="off"
+          />
+        </div>
+        <div class="row" style="gap: 8px">
+          <button class="btn btn-secondary btn-sm" type="button" :disabled="ocr.capturing" @click="runOcr">
+            {{ ocr.capturing ? '识别中...' : '立即截图识别' }}
+          </button>
+          <span v-if="!store.settings.baiduApiKey || !store.settings.baiduSecretKey" class="meta" style="color: var(--warn)">
+            需先填写 Key 才能识别
+          </span>
+        </div>
+        <div v-if="ocr.error" class="meta" style="color: var(--danger); margin-top: 6px">
+          {{ ocr.error }}
+        </div>
+        <div v-if="ocr.result" class="meta" style="margin-top: 6px; max-height: 140px; overflow: auto; background: var(--bg); padding: 8px; border-radius: 6px; font-size: 12px">
+          <div style="font-weight: 600; margin-bottom: 4px">识别结果（{{ ocr.result.lines.length }} 行）</div>
+          <div v-for="(l, i) in ocr.result.lines" :key="i">{{ l }}</div>
+        </div>
+        <div class="meta" style="font-size: 11px; margin-top: 6px">
+          免费版每天 500 次高精度识别。Key 只存本地，不上传。
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. 版本与项目信息 -->
+    <div v-if="activeTab === 'advanced'" class="stack" style="gap: 16px">
+      <!-- 软件与项目概览 -->
+      <div class="card settings-block stack">
+        <div class="row-between">
+          <h3>🚀 梦金囊 (ZDream) 项目信息</h3>
+          <span class="meta" style="font-size: 12px">v{{ updater.status.value.info?.currentVersion || '0.3.0' }}</span>
+        </div>
+        <div class="meta" style="font-size: 13px; line-height: 1.6">
+          <b>梦金囊</b> 是一款专为《梦幻西游》多开玩家打造的桌面级财务记账与辅助应用。
+          <br />
+          集成极速打字记账、独立悬浮球、师门任务助手、账号多开看板、OCR 识别与 AI 大模型智能意图提纯。
+        </div>
+        <div class="field" style="margin-top: 4px">
+          <label>开源项目地址 (GitHub)</label>
+          <div class="row" style="gap: 8px">
+            <input readonly class="input" value="https://github.com/saplinghub/ZDream" style="flex: 1" />
+          </div>
+        </div>
+      </div>
+
+      <!-- 版本更新 -->
+      <div class="card settings-block stack">
+        <div class="row-between">
+          <h3>版本更新检查</h3>
           <span class="meta" style="font-size: 12px">
             v{{ updater.status.value.info?.currentVersion || '...' }}
             <span v-if="updater.status.value.info && !updater.status.value.info.hasUpdate" style="color: var(--accent)">
-              · 已是最新
+              · 已是最新版本
             </span>
           </span>
         </div>
@@ -602,7 +683,7 @@ const activeTab = ref<'account' | 'shortcut' | 'appearance' | 'advanced'>('accou
           <div class="row" style="gap: 8px">
             <input v-model="store.settings.githubProxy" class="input" placeholder="https://ghproxy.com/" style="flex:1" />
             <button
-              class="btn btn-secondary btn-sm"
+              class="btn btn-primary btn-sm"
               type="button"
               :disabled="updater.status.value.checking"
               @click="checkUpdate"
