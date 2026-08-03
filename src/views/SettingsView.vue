@@ -589,18 +589,18 @@ const activeTab = ref<'account' | 'shortcut' | 'appearance' | 'advanced'>('accou
           v-if="updater.download.value.downloading"
           style="margin-bottom: 12px; padding: 12px; background: var(--bg); border-radius: 8px"
         >
-          <div style="font-size: 13px; margin-bottom: 8px">
-            正在下载 {{ updater.download.value.fileName }} ...
+          <div style="font-size: 13px; margin-bottom: 8px; font-weight: 600">
+            正在下载 {{ updater.download.value.fileName }}
           </div>
-          <div style="height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin-bottom: 6px">
+          <div style="height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin-bottom: 8px">
             <div
-              style="height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.3s"
+              style="height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.2s ease-out"
               :style="{ width: updater.download.value.progress + '%' }"
             />
           </div>
-          <div style="font-size: 12px; color: var(--muted); display: flex; justify-content: space-between">
-            <span>{{ updater.download.value.progress }}%</span>
-            <button class="btn btn-ghost btn-sm" type="button" @click="updater.cancelDownload()">取消</button>
+          <div style="font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; align-items: center">
+            <span>{{ updater.download.value.statusText || (updater.download.value.progress + '%') }}</span>
+            <button class="btn btn-ghost btn-sm" type="button" style="color: var(--danger)" @click="updater.cancelDownload()">✕ 取消下载</button>
           </div>
         </div>
 
@@ -611,16 +611,17 @@ const activeTab = ref<'account' | 'shortcut' | 'appearance' | 'advanced'>('accou
         >
           <div style="font-weight: 600; margin-bottom: 4px">✅ 下载完成</div>
           <div style="font-size: 11px; color: var(--muted); word-break: break-all">
-            {{ updater.download.value.savedPath }}
+            已保存至: {{ updater.download.value.savedPath }}
           </div>
         </div>
 
         <!-- 下载错误 -->
         <div
           v-if="updater.download.value.error"
-          style="margin-bottom: 12px; padding: 8px 12px; background: color-mix(in oklch, var(--danger) 8%, var(--surface)); border-radius: 8px; color: var(--danger); font-size: 13px"
+          style="margin-bottom: 12px; padding: 10px 12px; background: color-mix(in oklch, var(--danger) 8%, var(--surface)); border-radius: 8px; color: var(--danger); font-size: 13px"
         >
-          {{ updater.download.value.error }}
+          <div style="font-weight: 600; margin-bottom: 2px">提示 / 错误</div>
+          <div>{{ updater.download.value.error }}</div>
         </div>
 
         <!-- 推荐安装包 + 下载按钮 -->

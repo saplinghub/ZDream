@@ -30,6 +30,7 @@ export interface DownloadState {
   progress: number
   fileName: string
   savedPath: string
+  statusText: string
   error: string
 }
 
@@ -86,28 +87,28 @@ function proxyUrl(url: string, proxy: string): string {
 
 export function useUpdateChecker() {
   const status = ref<UpdateStatus>({ checking: false, error: '', info: null })
-  const download = ref<DownloadState>({ downloading: false, progress: 0, fileName: '', savedPath: '', error: '' })
-  let xhr: XMLHttpRequest | null = null
+  const download = ref<DownloadState>({ downloading: false, progress: 0, fileName: '', savedPath: '', statusText: '', error: '' })
+  let currentAbortController: AbortController | null = null
 
   /** 平台 fetch：Tauri 走 Rust 侧 reqwest（无 CORS 限制），浏览器走原生 fetch */
   async function platformFetch(
     url: string,
-    init?: { headers?: Record<string, string>; connectTimeout?: number },
-  ): Promise<{ ok: boolean; status: number; text: () => Promise<string>; arrayBuffer: () => Promise<ArrayBuffer>; json: () => Promise<unknown> }> {
+    init?: { headers?: Record<string, string>; connectTimeout?: number; signal?: AbortSignal },
+  ): Promise<Response> {
     const defaultHeaders = {
-      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) ZDreamApp/0.1.19',
-      Accept: 'application/vnd.github+json',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ZDreamApp/0.2.1',
+      Accept: 'application/vnd.github+json, application/octet-stream',
       ...(init?.headers || {}),
     }
     if (isTauri()) {
       const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http')
-      return tauriFetch(url, {
+      return (await tauriFetch(url, {
         headers: defaultHeaders,
-        connectTimeout: init?.connectTimeout ?? 30000,
-      }) as unknown as { ok: boolean; status: number; text: () => Promise<string>; arrayBuffer: () => Promise<ArrayBuffer>; json: () => Promise<unknown> }
+        connectTimeout: init?.connectTimeout ?? 120000,
+        signal: init?.signal,
+      })) as unknown as Response
     }
-    const res = await fetch(url, { headers: defaultHeaders })
-    return { ok: res.ok, status: res.status, text: () => res.text(), arrayBuffer: () => res.arrayBuffer(), json: () => res.json() }
+    return fetch(url, { headers: defaultHeaders, signal: init?.signal })
   }
 
   async function getCurrentVersion(): Promise<string> {
@@ -262,32 +263,104 @@ export function useUpdateChecker() {
     } catch { return false }
   }
 
-  /** 平台 fetch 下载（Tauri 走 Rust reqwest，无 CORS） */
+  function cancelDownload() {
+    if (currentAbortController) {
+      currentAbortController.abort()
+      currentAbortController = null
+    }
+    download.value = {
+      downloading: false,
+      progress: 0,
+      fileName: '',
+      savedPath: '',
+      statusText: '',
+      error: '已取消下载',
+    }
+  }
+
+  /** 平台 fetch 下载（支持 Chunk 流式实时进度 + AbortController 取消） */
   async function downloadUpdate(assetUrl: string, fileName: string, proxy = ''): Promise<string | null> {
-    download.value = { downloading: true, progress: 0, fileName, savedPath: '', error: '' }
+    currentAbortController = new AbortController()
+    const signal = currentAbortController.signal
+
+    download.value = {
+      downloading: true,
+      progress: 0,
+      fileName,
+      savedPath: '',
+      statusText: '正在连接服务器...',
+      error: '',
+    }
 
     try {
       const downloadUrl = proxyUrl(assetUrl, proxy)
       logger.info('update', `下载开始 | ${fileName} | ${downloadUrl}`)
 
-      const res = await platformFetch(downloadUrl, { connectTimeout: 120000 })
+      const res = await platformFetch(downloadUrl, { connectTimeout: 120000, signal })
       logger.info('update', `下载响应 HTTP ${res.status}`)
+
       if (!res.ok) {
         const msg =
-          res.status === 404 ? '文件不存在（可能构建中）'
-          : res.status === 403 ? '访问被拒绝（GitHub API 限流）'
-          : `下载失败 HTTP ${res.status}`
+          res.status === 404
+            ? '文件不存在（可能构建中）'
+            : res.status === 403
+            ? '访问被拒绝（GitHub API 限流）'
+            : `下载失败 HTTP ${res.status}`
         throw new Error(msg)
       }
 
-      // Rust 侧返回 ArrayBuffer 没有进度，这里用简易进度模拟（下载完成后直接 100%）
-      download.value.progress = 60
-      const data = await res.arrayBuffer()
-      const merged = new Uint8Array(data)
+      const contentLength = Number(res.headers.get('content-length') || 0)
+      const totalMb = contentLength > 0 ? (contentLength / 1024 / 1024).toFixed(1) : ''
+
+      let merged: Uint8Array
+
+      if (res.body && typeof res.body.getReader === 'function') {
+        const reader = res.body.getReader()
+        let receivedLength = 0
+        const chunks: Uint8Array[] = []
+
+        while (true) {
+          if (signal.aborted) {
+            throw new DOMException('已取消下载', 'AbortError')
+          }
+          const { done, value } = await reader.read()
+          if (done) break
+          if (value) {
+            chunks.push(value)
+            receivedLength += value.length
+            const loadedMb = (receivedLength / 1024 / 1024).toFixed(1)
+            const percent = contentLength > 0
+              ? Math.min(99, Math.round((receivedLength / contentLength) * 100))
+              : Math.min(95, Math.round((receivedLength / (50 * 1024 * 1024)) * 100))
+
+            download.value = {
+              downloading: true,
+              progress: percent,
+              fileName,
+              savedPath: '',
+              statusText: totalMb ? `${loadedMb} MB / ${totalMb} MB (${percent}%)` : `${loadedMb} MB (${percent}%)`,
+              error: '',
+            }
+          }
+        }
+
+        merged = new Uint8Array(receivedLength)
+        let position = 0
+        for (const chunk of chunks) {
+          merged.set(chunk, position)
+          position += chunk.length
+        }
+      } else {
+        download.value.progress = 50
+        download.value.statusText = '正在接收数据包...'
+        const data = await res.arrayBuffer()
+        merged = new Uint8Array(data)
+      }
+
       logger.info('update', `下载完成 | ${fileName} | ${merged.length} 字节`)
       if (merged.length === 0) throw new Error('下载内容为空')
 
-      // Tauri → 写 Downloads
+      // Tauri -> 写 Downloads
       try {
         const { writeFile } = await import('@tauri-apps/plugin-fs')
         const { join, downloadDir } = await import('@tauri-apps/api/path')
@@ -295,32 +368,47 @@ export function useUpdateChecker() {
         logger.info('update', `写入文件 | ${path}`)
         await writeFile(path, merged)
         logger.info('update', `写入成功 | ${path}`)
-        download.value = { downloading: false, progress: 100, fileName, savedPath: path, error: '' }
+        download.value = {
+          downloading: false,
+          progress: 100,
+          fileName,
+          savedPath: path,
+          statusText: '下载完成',
+          error: '',
+        }
         return path
       } catch (writeErr) {
         logger.error('update', `写入失败（降级浏览器下载）`, writeErr)
-        // 浏览器降级
         const blob = new Blob([merged], { type: 'application/octet-stream' })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
-        a.href = url; a.download = fileName; a.click()
+        a.href = url
+        a.download = fileName
+        a.click()
         URL.revokeObjectURL(url)
-        download.value = { downloading: false, progress: 100, fileName, savedPath: '(浏览器下载)', error: `写入目录失败：${writeErr instanceof Error ? writeErr.message : String(writeErr)}` }
+        download.value = {
+          downloading: false,
+          progress: 100,
+          fileName,
+          savedPath: '(浏览器下载)',
+          statusText: '已在浏览器拉起下载',
+          error: `写入目录失败：${writeErr instanceof Error ? writeErr.message : String(writeErr)}`,
+        }
         return null
       }
     } catch (e) {
-      if (e instanceof DOMException && e.name === 'AbortError') {
-        download.value = { downloading: false, progress: 0, fileName: '', savedPath: '', error: '已取消' }
+      if (signal.aborted || (e instanceof DOMException && e.name === 'AbortError')) {
+        download.value = { downloading: false, progress: 0, fileName: '', savedPath: '', statusText: '', error: '已取消下载' }
         return null
       }
       const msg = e instanceof Error ? e.message : '下载失败：网络不可用'
       logger.error('update', `下载失败: ${msg}`, e)
-      download.value = { downloading: false, progress: 0, fileName: '', savedPath: '', error: msg }
+      download.value = { downloading: false, progress: 0, fileName: '', savedPath: '', statusText: '', error: msg }
       return null
+    } finally {
+      currentAbortController = null
     }
   }
-
-  function cancelDownload() { xhr?.abort() }
 
   return { status, download, check, downloadUpdate, openFile, silentInstall, cancelDownload, parseVersion, compareVersion, GITHUB_RELEASES }
 }
