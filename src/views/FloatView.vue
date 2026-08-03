@@ -177,8 +177,10 @@ function onKeydown(e: KeyboardEvent) {
         return
       }
     }
-    e.preventDefault()
-    toggleCollapse()
+    if (!isPinned.value) {
+      e.preventDefault()
+      toggleCollapse()
+    }
   }
 }
 
@@ -198,6 +200,9 @@ onMounted(async () => {
   window.addEventListener('mouseenter', autoFocusInput)
   window.addEventListener('focus', autoFocusInput)
   if (isTauri()) {
+    import('@tauri-apps/api/webviewWindow').then(({ getCurrentWebviewWindow }) => {
+      getCurrentWebviewWindow().setAlwaysOnTop(true).catch(() => {})
+    })
     try {
       if (!collapsed.value) {
         await setSize(PANEL_W, PANEL_H)
@@ -235,8 +240,21 @@ onUnmounted(() => {
   unlistenOpen?.()
 })
 
+const PIN_KEY = 'mhxy-zdream:float-pinned'
+const isPinned = ref(localStorage.getItem(PIN_KEY) === 'true')
+
+function togglePin() {
+  isPinned.value = !isPinned.value
+  localStorage.setItem(PIN_KEY, String(isPinned.value))
+  if (isTauri()) {
+    import('@tauri-apps/api/webviewWindow').then(({ getCurrentWebviewWindow }) => {
+      getCurrentWebviewWindow().setAlwaysOnTop(true).catch(() => {})
+    })
+  }
+}
+
 async function onBlur() {
-  if (collapsed.value || transitioning.value) return
+  if (collapsed.value || transitioning.value || isPinned.value) return
   const { x: lx, y: ly, scale } = await getWinLogicalPos()
   const anchorX = lx + ANCHOR_X
   const anchorY = ly + ANCHOR_Y
@@ -355,6 +373,19 @@ async function toggleCollapse() {
       <div class="p-head" data-tauri-drag-region>
         <span class="p-title">{{ activityStore.current?.name || '梦金囊' }}</span>
         <div style="display:flex;align-items:center;gap:6px">
+          <!-- 📌 悬浮窗固定/解锁按钮 -->
+          <button
+            class="p-btn-pin"
+            :class="{ pinned: isPinned }"
+            @click="togglePin"
+            :title="isPinned ? '已固定展开（不会自动收起，始终置顶最上层，可随时拖拽移动）' : '固定悬浮窗（防止自动收起，始终置顶最上层）'"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="17" x2="12" y2="22" />
+              <path d="M5 17h14l-1.5-5H6.5L5 17z" />
+              <path d="M9 12V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v8" />
+            </svg>
+          </button>
           <button class="p-btn-main" @click="showMainWindow" title="打开主窗口">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
           </button>
@@ -444,6 +475,29 @@ html, body, #app {
   transform: rotate(180deg);
 }
 .p-btn svg { width: 12px; height: 12px; }
+.p-btn-pin {
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+.p-btn-pin:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in oklch, var(--accent) 10%, transparent);
+}
+.p-btn-pin.pinned {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in oklch, var(--accent) 18%, var(--surface));
+  box-shadow: 0 0 8px color-mix(in oklch, var(--accent) 30%, transparent);
+}
+.p-btn-pin svg { width: 13px; height: 13px; }
+
 .p-btn-main {
   display: flex; align-items: center; justify-content: center;
   width: 28px; height: 28px;
