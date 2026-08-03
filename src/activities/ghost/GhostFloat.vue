@@ -5,6 +5,8 @@ import { useGhostStore } from '@/stores/ghost'
 import { useOcrStore } from '@/stores/ocr'
 import { GHOST_MAPS } from '@/data/ghostMaps'
 
+import GhostMapRadar from '@/components/ui/GhostMapRadar.vue'
+
 const appStore = useAppStore()
 const ghostStore = useGhostStore()
 const ocrStore = useOcrStore()
@@ -179,6 +181,13 @@ defineExpose({ handleEsc })
           <span class="val">{{ ghostStore.currentTask.tactics.desc }}</span>
         </div>
       </div>
+
+      <!-- 可视化地图雷达与 鬼怪刷新搜索范围圈沙盘 -->
+      <GhostMapRadar
+        :map-name="ghostStore.currentTask.mapName"
+        :pos-x="ghostStore.currentTask.posX"
+        :pos-y="ghostStore.currentTask.posY"
+      />
     </div>
 
     <!-- 初始空状态说明 -->
