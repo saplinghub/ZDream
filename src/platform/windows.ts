@@ -87,17 +87,28 @@ export async function openCaptureWindow(): Promise<void> {
   if (!isTauri()) return
   try {
     const { getAllWebviewWindows, WebviewWindow } = await import('@tauri-apps/api/webviewWindow')
+    const { currentMonitor, primaryMonitor } = await import('@tauri-apps/api/window')
     const all = await getAllWebviewWindows()
-    const existing = all.find((w) => w.label === CAPTURE_WINDOW)
+    const existing = all.find((w: { label: string }) => w.label === CAPTURE_WINDOW)
     if (existing) {
       await existing.show()
       await existing.setFocus()
       return
     }
+
+    const monitor = (await currentMonitor()) || (await primaryMonitor())
+    const factor = monitor?.scaleFactor || 1
+    const width = monitor ? Math.round(monitor.size.width / factor) : 1920
+    const height = monitor ? Math.round(monitor.size.height / factor) : 1080
+
     const w = new WebviewWindow(CAPTURE_WINDOW, {
       url: floatUrl('/capture'),
       title: '截图',
-      fullscreen: true,
+      fullscreen: false,
+      x: 0,
+      y: 0,
+      width,
+      height,
       decorations: false,
       transparent: true,
       shadow: false,
@@ -108,7 +119,7 @@ export async function openCaptureWindow(): Promise<void> {
     })
     await new Promise<void>((resolve, reject) => {
       w.once('tauri://created', () => resolve())
-      w.once('tauri://error', (e) => reject(e))
+      w.once('tauri://error', (e: unknown) => reject(e))
     })
   } catch (e) {
     console.error('[windows] openCaptureWindow failed:', e)

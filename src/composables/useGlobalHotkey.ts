@@ -26,12 +26,15 @@ export async function triggerFloatOpen(): Promise<void> {
 
 /** 注册全局快捷键（仅主窗口调用一次） */
 export async function registerGlobalHotkey(hotkey: string): Promise<boolean> {
-  if (!isTauri()) {
-    logger.info('hotkey', '浏览器模式：跳过全局注册')
+  if (!isTauri() || !hotkey) {
+    if (!isTauri()) logger.info('hotkey', '浏览器模式：跳过全局注册')
     return false
   }
   try {
-    const { register } = await import('@tauri-apps/plugin-global-shortcut')
+    const { register, isRegistered, unregister } = await import('@tauri-apps/plugin-global-shortcut')
+    if (await isRegistered(hotkey)) {
+      await unregister(hotkey)
+    }
     await register(hotkey, () => {
       logger.info('hotkey', `全局热键触发: ${hotkey}`)
       triggerFloatOpen()
@@ -51,7 +54,10 @@ export async function registerGlobalShortcut(
 ): Promise<boolean> {
   if (!isTauri() || !hotkey) return false
   try {
-    const { register } = await import('@tauri-apps/plugin-global-shortcut')
+    const { register, isRegistered, unregister } = await import('@tauri-apps/plugin-global-shortcut')
+    if (await isRegistered(hotkey)) {
+      await unregister(hotkey)
+    }
     await register(hotkey, () => {
       logger.info('hotkey', `通用热键触发: ${hotkey}`)
       handler()

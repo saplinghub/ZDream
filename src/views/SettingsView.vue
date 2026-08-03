@@ -31,7 +31,7 @@ const newTpl = reactive({ name: '', accountId: '', item: '', io: 'in' as 'in' | 
 const updater = useUpdateChecker()
 
 async function checkUpdate() {
-  await updater.check(store.settings.githubProxy)
+  await updater.check(store.settings.githubProxy, true)
   if (updater.status.value.info?.hasUpdate) {
     showUpdateModal.value = true
   }

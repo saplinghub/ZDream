@@ -29,7 +29,8 @@ const route = useRoute()
 
 const isAuxChrome = computed(() => {
   const c = route.meta?.chrome
-  return c === 'float' || c === 'dock' || c === 'capture'
+  const hash = window.location.hash
+  return c === 'float' || c === 'dock' || c === 'capture' || hash.includes('/float') || hash.includes('/capture')
 })
 
 function onKey(e: KeyboardEvent) {

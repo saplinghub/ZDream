@@ -67,6 +67,14 @@ function push(level: LogLevel, tag: string, msg: string, data?: unknown) {
   else if (level === 'info') console.info(line, data ?? '')
   else if (level === 'warn') console.warn(line, data ?? '')
   else console.error(line, data ?? '')
+
+  // 输出到终端 (Rust stdout)
+  import('@tauri-apps/api/core')
+    .then(({ invoke }) => {
+      const extra = data !== undefined ? ` ${typeof data === 'object' ? JSON.stringify(data) : String(data)}` : ''
+      return invoke('log_to_terminal', { level, tag, msg: `${msg}${extra}` })
+    })
+    .catch(() => {})
 }
 
 export function log(level: LogLevel, tag: string, msg: string, data?: unknown): void {

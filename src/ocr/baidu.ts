@@ -3,6 +3,7 @@
  * 通用文字识别（高精度版 general_basic 免费额度 500次/天）
  */
 import type { OcrConfig, OcrResult } from './types'
+import { isTauri } from '@/platform/desktop'
 
 const TOKEN_URL = 'https://aip.baidubce.com/oauth/2.0/token'
 const OCR_URL = 'https://aip.baidubce.com/rest/2.0/ocr/v1/general_basic'
@@ -14,6 +15,14 @@ interface TokenCache {
 
 let tokenCache: TokenCache | null = null
 
+async function httpFetch(url: string, init?: RequestInit): Promise<Response> {
+  if (isTauri()) {
+    const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http')
+    return (await tauriFetch(url, init as any)) as unknown as Response
+  }
+  return fetch(url, init)
+}
+
 /** 获取 access_token（带缓存，提前 5 分钟过期） */
 async function getAccessToken(config: OcrConfig): Promise<string> {
   if (tokenCache && tokenCache.expiresAt > Date.now()) {
@@ -23,7 +32,7 @@ async function getAccessToken(config: OcrConfig): Promise<string> {
     `${TOKEN_URL}?grant_type=client_credentials` +
     `&client_id=${encodeURIComponent(config.apiKey)}` +
     `&client_secret=${encodeURIComponent(config.secretKey)}`
-  const res = await fetch(url)
+  const res = await httpFetch(url)
   if (!res.ok) throw new Error(`获取 token 失败 HTTP ${res.status}`)
   const data = (await res.json()) as {
     access_token?: string
@@ -52,7 +61,7 @@ export async function recognizeImage(
   form.set('detect_direction', 'true')
   form.set('vertexes_location', 'false')
 
-  const res = await fetch(`${OCR_URL}?access_token=${encodeURIComponent(token)}`, {
+  const res = await httpFetch(`${OCR_URL}?access_token=${encodeURIComponent(token)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: form.toString(),

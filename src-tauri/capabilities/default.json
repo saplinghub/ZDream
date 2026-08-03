@@ -23,6 +23,7 @@
     "dialog:default",
     "fs:default",
     "fs:allow-write",
+    "fs:allow-remove",
     {
       "identifier": "fs:scope",
       "allow": [
@@ -42,6 +43,13 @@
       ]
     },
     "http:default",
+    {
+      "identifier": "http:allow-fetch",
+      "allow": [
+        { "url": "https://**" },
+        { "url": "http://**" }
+      ]
+    },
     "global-shortcut:default",
     "global-shortcut:allow-register",
     "global-shortcut:allow-unregister",

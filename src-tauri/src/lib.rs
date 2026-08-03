@@ -6,6 +6,11 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 #[cfg(target_os = "macos")]
 use tauri::WebviewUrl;
 
+#[tauri::command]
+fn log_to_terminal(level: String, tag: String, msg: String) {
+    println!("[FRONTEND-{}] [{}] {}", level.to_uppercase(), tag, msg);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let migrations = vec![Migration {
@@ -16,6 +21,7 @@ pub fn run() {
     }];
 
     tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![log_to_terminal])
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())

@@ -93,16 +93,21 @@ export function useUpdateChecker() {
   async function platformFetch(
     url: string,
     init?: { headers?: Record<string, string>; connectTimeout?: number },
-  ): Promise<{ ok: boolean; status: number; arrayBuffer: () => Promise<ArrayBuffer>; json: () => Promise<unknown> }> {
+  ): Promise<{ ok: boolean; status: number; text: () => Promise<string>; arrayBuffer: () => Promise<ArrayBuffer>; json: () => Promise<unknown> }> {
+    const defaultHeaders = {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) ZDreamApp/0.1.19',
+      Accept: 'application/vnd.github+json',
+      ...(init?.headers || {}),
+    }
     if (isTauri()) {
       const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http')
       return tauriFetch(url, {
-        headers: init?.headers,
+        headers: defaultHeaders,
         connectTimeout: init?.connectTimeout ?? 30000,
-      })
+      }) as unknown as { ok: boolean; status: number; text: () => Promise<string>; arrayBuffer: () => Promise<ArrayBuffer>; json: () => Promise<unknown> }
     }
-    const res = await fetch(url, { headers: init?.headers })
-    return { ok: res.ok, status: res.status, arrayBuffer: () => res.arrayBuffer(), json: () => res.json() }
+    const res = await fetch(url, { headers: defaultHeaders })
+    return { ok: res.ok, status: res.status, text: () => res.text(), arrayBuffer: () => res.arrayBuffer(), json: () => res.json() }
   }
 
   async function getCurrentVersion(): Promise<string> {
@@ -114,7 +119,24 @@ export function useUpdateChecker() {
     }
   }
 
-  async function check(proxy = ''): Promise<UpdateInfo | null> {
+  const UPDATE_CACHE_KEY = 'zdream:update_cache_v2'
+
+  async function check(proxy = '', force = false): Promise<UpdateInfo | null> {
+    if (!force) {
+      try {
+        const cachedStr = localStorage.getItem(UPDATE_CACHE_KEY)
+        if (cachedStr) {
+          const cached = JSON.parse(cachedStr) as { timestamp: number; info: UpdateInfo }
+          // 缓存 15 分钟内生效
+          if (Date.now() - cached.timestamp < 15 * 60 * 1000) {
+            logger.info('update', `使用 15 分钟内的版本更新缓存: v${cached.info.latestVersion}`)
+            status.value = { checking: false, error: '', info: cached.info }
+            return cached.info
+          }
+        }
+      } catch { /* ignore cache read error */ }
+    }
+
     status.value = { checking: true, error: '', info: null }
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), 15000) // 15s 超时
@@ -123,41 +145,84 @@ export function useUpdateChecker() {
       const apiUrl = proxyUrl(GITHUB_API, proxy)
       logger.info('update', `检查更新 | 当前 v${current} | ${apiUrl}`)
       const res = await platformFetch(apiUrl, {
-        headers: { Accept: 'application/vnd.github+json' },
         connectTimeout: 15000,
       })
       logger.info('update', `检查更新 HTTP ${res.status}`)
+      
+      let info: UpdateInfo | null = null
+
       if (!res.ok) {
         if (res.status === 403) {
-          logger.warn('update', '检查更新 403：GitHub API 限流')
-          status.value = { checking: false, error: 'GitHub API 限流（未认证 60次/小时），请稍后重试或配置加速代理', info: null }
-          return null
+          logger.warn('update', 'GitHub REST API 403 限流，尝试从 RSS/Atom 订阅回退检查版本...')
+          // 备用机制：从 Releases Atom 订阅解析最新 Tag（不占用 REST API 额度）
+          const atomUrl = proxyUrl('https://github.com/saplinghub/ZDream/releases.atom', proxy)
+          const atomRes = await platformFetch(atomUrl, { connectTimeout: 15000 })
+          if (atomRes.ok) {
+            const xml = await atomRes.text()
+            const tagMatch = xml.match(/<title>([^<]+)<\/title>/g)
+            // 第一个标题为 Repository，第二个通常为最新 Release Tag（如 v0.1.20）
+            let latestTag = ''
+            if (tagMatch) {
+              for (const title of tagMatch) {
+                const clean = title.replace(/<\/?title>/g, '').trim()
+                if (clean.startsWith('v')) {
+                  latestTag = clean
+                  break
+                }
+              }
+            }
+            if (latestTag) {
+              const latest = parseVersion(latestTag)
+              const hasUpdate = compareVersion(latest, parseVersion(current)) > 0
+              info = {
+                currentVersion: current,
+                latestVersion: latestTag,
+                hasUpdate,
+                body: '（已通过 GitHub Releases Atom 获取到新版本 notification）',
+                downloadUrl: GITHUB_RELEASES,
+                assets: [],
+                myAssets: [],
+                best: null,
+              }
+              logger.info('update', `Atom 回退解析成功: 最新 v${info.latestVersion} | 有更新: ${hasUpdate}`)
+            }
+          }
+          if (!info) {
+            status.value = { checking: false, error: 'GitHub API 限流（未认证 60次/小时），请稍后重试或配置加速代理', info: null }
+            return null
+          }
+        } else {
+          throw new Error(`HTTP ${res.status}`)
         }
-        throw new Error(`HTTP ${res.status}`)
-      }
-      const release = (await res.json()) as Record<string, unknown> & { tag_name?: string; body?: string; html_url?: string; assets?: unknown[] }
-      const latest = parseVersion(release.tag_name || 'v0.0.0')
-      const hasUpdate = compareVersion(latest, parseVersion(current)) > 0
-      const assets: UpdateAsset[] = (release.assets || []).map((a: unknown) => {
-        const rec = a as Record<string, unknown>
-        return {
-          name: String(rec.name || ''),
-          url: String(rec.browser_download_url || ''),
-          size: Number(rec.size || 0),
+      } else {
+        const release = (await res.json()) as Record<string, unknown> & { tag_name?: string; body?: string; html_url?: string; assets?: unknown[] }
+        const latest = parseVersion(release.tag_name || 'v0.0.0')
+        const hasUpdate = compareVersion(latest, parseVersion(current)) > 0
+        const assets: UpdateAsset[] = (release.assets || []).map((a: unknown) => {
+          const rec = a as Record<string, unknown>
+          return {
+            name: String(rec.name || ''),
+            url: String(rec.browser_download_url || ''),
+            size: Number(rec.size || 0),
+          }
+        })
+        const { myAssets, best } = filterMyAssets(assets)
+        info = {
+          currentVersion: current,
+          latestVersion: release.tag_name || latest,
+          hasUpdate,
+          body: release.body || '',
+          downloadUrl: release.html_url || GITHUB_RELEASES,
+          assets, myAssets, best,
         }
-      })
-      const { myAssets, best } = filterMyAssets(assets)
-      const info: UpdateInfo = {
-        currentVersion: current,
-        latestVersion: release.tag_name || latest,
-        hasUpdate,
-        body: release.body || '',
-        downloadUrl: release.html_url || GITHUB_RELEASES,
-        assets, myAssets, best,
       }
+
       status.value = { checking: false, error: '', info }
-      logger.info('update', `检查更新完成 | 最新 v${info.latestVersion} | 有更新: ${hasUpdate} | 资产 ${assets.length} 个`,
-        assets.map((a) => a.name))
+      try {
+        localStorage.setItem(UPDATE_CACHE_KEY, JSON.stringify({ timestamp: Date.now(), info }))
+      } catch { /* ignore */ }
+
+      logger.info('update', `检查更新完成 | 最新 v${info.latestVersion} | 有更新: ${info.hasUpdate}`)
       return info
     } catch (e) {
       const msg = e instanceof Error ? e.message : '未知错误'
