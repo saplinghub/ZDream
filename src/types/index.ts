@@ -28,7 +28,7 @@ export interface ItemDict {
   price: number
 }
 
-export type ItemCategory = '道具' | '装备' | '消耗品' | '梦幻币' | '宠装' | '其他'
+export type ItemCategory = '道具' | '装备' | '消耗品' | '梦幻币' | '宠装' | '兽诀' | '宝石' | '其他'
 
 /** 游戏收支子类型 */
 export type GameSubType = '日常' | '副本' | '摆摊' | '打造' | '炼妖' | '其他'

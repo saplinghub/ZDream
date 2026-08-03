@@ -436,6 +436,63 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
+  function batchImportItems(newItems: Array<{ name: string; cat?: ItemDict['cat']; price?: number }>, mode: 'overwrite' | 'skip' | 'append' = 'overwrite') {
+    let addedCount = 0
+    let updatedCount = 0
+
+    for (const item of newItems) {
+      const name = item.name.trim()
+      if (!name) continue
+
+      const existingIdx = items.value.findIndex((it) => it.name.toLowerCase() === name.toLowerCase())
+      if (existingIdx >= 0) {
+        if (mode === 'overwrite') {
+          items.value[existingIdx] = {
+            ...items.value[existingIdx],
+            cat: item.cat || items.value[existingIdx].cat,
+            price: item.price !== undefined && item.price > 0 ? item.price : items.value[existingIdx].price,
+          }
+          updatedCount++
+        } else if (mode === 'append') {
+          items.value.push({
+            name,
+            cat: item.cat || '道具',
+            price: item.price ?? 0,
+          })
+          addedCount++
+        }
+      } else {
+        items.value.push({
+          name,
+          cat: item.cat || '道具',
+          price: item.price ?? 0,
+        })
+        addedCount++
+      }
+    }
+
+    toast(`批量导入成功：新增 ${addedCount} 项，更新 ${updatedCount} 项`)
+  }
+
+  function resetToPresetItems() {
+    import('@/data/seedItems').then(({ PRESET_ITEMS }) => {
+      items.value = PRESET_ITEMS.map((it) => ({
+        name: it.name,
+        cat: it.cat,
+        price: it.price,
+      }))
+      toast(`已重置加载全量预设词典 (${PRESET_ITEMS.length} 种道具)`)
+    })
+  }
+
+  function updateItemPrice(name: string, newPrice: number) {
+    const item = items.value.find((it) => it.name === name)
+    if (item) {
+      item.price = Math.max(0, newPrice)
+      toast(`已更新参考价：${name}`)
+    }
+  }
+
   // —— 模板管理 ——
   function addTemplate(input: {
     name: string
@@ -1074,6 +1131,9 @@ export const useAppStore = defineStore('app', () => {
     removeAccount,
     addItem,
     removeItem,
+    batchImportItems,
+    resetToPresetItems,
+    updateItemPrice,
     addTemplate,
     removeTemplate,
     addGameRecord,
