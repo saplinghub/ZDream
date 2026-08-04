@@ -6,18 +6,22 @@ import { useOcrStore } from '@/stores/ocr'
 import { GHOST_MAPS } from '@/data/ghostMaps'
 
 import GhostMapRadar from '@/components/ui/GhostMapRadar.vue'
+import { useActivityStore } from '@/stores/activity'
 
 const appStore = useAppStore()
 const ghostStore = useGhostStore()
 const ocrStore = useOcrStore()
+const activityStore = useActivityStore()
 
 const inputText = ref('')
 const isRecording = ref(false)
 
-// 自动同步 OCR 最新识别文本
+// 自动同步 OCR 最新识别文本 (仅在开启抓鬼模式下生效)
 watch(
   () => ocrStore.result?.lines,
   (lines) => {
+    if (activityStore.currentId !== 'ghost') return
+
     if (lines && lines.length) {
       const fullText = lines.join('\n')
       const ok = ghostStore.parseAndSet(fullText)
