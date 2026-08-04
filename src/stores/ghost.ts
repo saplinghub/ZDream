@@ -46,19 +46,11 @@ const STORAGE_LAST_GHOST_KEY = 'mhxy-zdream:ghost-last-start'
 const STORAGE_LAPS_KEY = 'mhxy-zdream:ghost-laps'
 const STORAGE_HISTORY_KEY = 'mhxy-zdream:ghost-history-sessions'
 
-function loadTaskFromStorage(): GhostTaskState | null {
-  try {
-    const json = localStorage.getItem(STORAGE_TASK_KEY)
-    if (!json) return null
-    return JSON.parse(json)
-  } catch {
-    return null
-  }
-}
+
 
 export const useGhostStore = defineStore('ghost', () => {
   const ringIndex = ref<number>(Number(localStorage.getItem(STORAGE_RING_KEY) || 1))
-  const currentTask = ref<GhostTaskState | null>(loadTaskFromStorage())
+  const currentTask = ref<GhostTaskState | null>(null)
   const rawInput = ref('')
 
   // ── ⏱️ 抓鬼会话状态与单只鬼耗时追踪 ──

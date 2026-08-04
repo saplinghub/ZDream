@@ -46,6 +46,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (timerInterval) clearInterval(timerInterval)
+  ghostStore.clearTask()
 })
 
 // 自动监听 OCR

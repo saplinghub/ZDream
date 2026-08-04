@@ -302,9 +302,9 @@ async function setWinLogicalPos(logicalX: number, logicalY: number, scale: numbe
   } catch { /* ignore */ }
 }
 
-// 面板宽高 (固定协调比例)
+// 面板宽高 (加大高度，彻底解决底部控件防截断)
 const PANEL_W = 360
-const PANEL_H = 520
+const PANEL_H = 580
 // 锚点：展开态面板的视觉中心
 const ANCHOR_X = Math.round(PANEL_W / 2)
 const ANCHOR_Y = Math.round(PANEL_H / 2)
