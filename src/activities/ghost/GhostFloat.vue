@@ -7,6 +7,8 @@ import { useActivityStore } from '@/stores/activity'
 import { GHOST_MAPS } from '@/data/ghostMaps'
 import GhostMapRadar from '@/components/ui/GhostMapRadar.vue'
 
+import { isTauri } from '@/platform/desktop'
+
 const appStore = useAppStore()
 const ghostStore = useGhostStore()
 const ocrStore = useOcrStore()
@@ -17,6 +19,21 @@ const isRecording = ref(false)
 
 onMounted(() => {
   activityStore.switchTo('ghost')
+
+  if (isTauri()) {
+    import('@tauri-apps/api/event').then(({ listen }) => {
+      listen('ghost:parse-ocr', (ev) => {
+        const payload = ev.payload as { text: string }
+        if (payload?.text) {
+          const ok = ghostStore.parseAndSet(payload.text)
+          if (ok) {
+            activityStore.switchTo('ghost')
+            appStore.toast(`👻 已识别抓鬼任务：${ghostStore.currentTask?.mapName} (${ghostStore.currentTask?.posX}, ${ghostStore.currentTask?.posY})`)
+          }
+        }
+      })
+    })
+  }
 })
 
 // 自动同步 OCR 最新识别文本

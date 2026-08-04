@@ -113,6 +113,11 @@ onMounted(() => {
             activityStore.switchTo('ghost')
             store.toast(`👻 [抓鬼定位] ${ghostStore.currentTask?.mapName} (${ghostStore.currentTask?.posX}, ${ghostStore.currentTask?.posY})`)
           }
+
+          // 广播跨窗口事件给悬浮窗 (Floating Window WebView)
+          import('@tauri-apps/api/event').then(({ emit }) => {
+            emit('ghost:parse-ocr', { text: fullText }).catch(() => {})
+          })
         } else {
           ocrStore.setError(payload.error || '未知错误')
           ocrStore.capturedImgUrl = ''

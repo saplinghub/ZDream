@@ -14,10 +14,21 @@ export interface GhostTaskState {
 }
 
 const STORAGE_RING_KEY = 'mhxy-zdream:ghost-ring'
+const STORAGE_TASK_KEY = 'mhxy-zdream:ghost-task'
+
+function loadTaskFromStorage(): GhostTaskState | null {
+  try {
+    const json = localStorage.getItem(STORAGE_TASK_KEY)
+    if (!json) return null
+    return JSON.parse(json)
+  } catch {
+    return null
+  }
+}
 
 export const useGhostStore = defineStore('ghost', () => {
   const ringIndex = ref<number>(Number(localStorage.getItem(STORAGE_RING_KEY) || 1))
-  const currentTask = ref<GhostTaskState | null>(null)
+  const currentTask = ref<GhostTaskState | null>(loadTaskFromStorage())
   const rawInput = ref('')
 
   function setRingIndex(idx: number) {
@@ -57,10 +68,10 @@ export const useGhostStore = defineStore('ghost', () => {
 
     // 1. 解析鬼怪类型
     let ghostType: '血鬼' | '防鬼' | '敏鬼' | '法鬼' | '未知' = '未知'
-    if (/血鬼|马面|野鬼|僵尸/i.test(clean)) ghostType = '血鬼'
+    if (/血鬼|马面|野鬼|僵尸|捣蛋鬼|调皮鬼|顽皮鬼/i.test(clean)) ghostType = '血鬼'
     else if (/防鬼|壳鬼|骷髅怪|牛头/i.test(clean)) ghostType = '防鬼'
     else if (/敏鬼|吸血鬼/i.test(clean)) ghostType = '敏鬼'
-    else if (/法鬼|鬼王/i.test(clean)) ghostType = '法鬼'
+    else if (/法鬼|鬼王|炎魔神/i.test(clean)) ghostType = '法鬼'
 
     // 2. 解析环数 (如果有 "第 X 环")
     const ringMatch = clean.match(/第\s*(\d{1,2})\s*环/)
@@ -131,6 +142,9 @@ export const useGhostStore = defineStore('ghost', () => {
         tactics,
         timestamp: Date.now(),
       }
+      try {
+        localStorage.setItem(STORAGE_TASK_KEY, JSON.stringify(currentTask.value))
+      } catch { /* ignore */ }
       return true
     }
 
@@ -140,6 +154,9 @@ export const useGhostStore = defineStore('ghost', () => {
   function clearTask() {
     currentTask.value = null
     rawInput.value = ''
+    try {
+      localStorage.removeItem(STORAGE_TASK_KEY)
+    } catch { /* ignore */ }
   }
 
   const isTenthRing = computed(() => ringIndex.value === 10)
