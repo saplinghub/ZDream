@@ -16,11 +16,49 @@ const newItem = reactive({
   price: 0,
 })
 
+/** 智能主分类到细分分类的映射表 */
+const CATEGORY_GROUPS: Record<string, string[]> = {
+  全部: [],
+  兽诀: ['兽诀', '低级魔兽要诀', '高级魔兽要诀'],
+  内丹: ['低级召唤兽内丹', '高级召唤兽内丹'],
+  宝石: ['宝石', '精魄灵石'],
+  装备: ['装备', '环装', '灵饰指南书', '元灵晶石'],
+  材料: ['打造材料', '点化材料', '点化石', '五宝'],
+  召唤兽: ['召唤兽用品', '召唤兽胚子', '孩子用品'],
+  消耗品: ['消耗品', '杂货', '特殊', '变身卡', '珍珠', '归墟之证', '道具', '其他'],
+}
+
+const mainCategoryList = ['全部', '兽诀', '内丹', '宝石', '装备', '材料', '召唤兽', '消耗品']
+
+function isItemInCategory(itemCat: string, targetCat: string): boolean {
+  if (targetCat === '全部') return true
+  if (itemCat === targetCat) return true
+  const group = CATEGORY_GROUPS[targetCat]
+  if (group && group.includes(itemCat)) return true
+  return false
+}
+
+function getItemCountForCat(targetCat: string): number {
+  return store.items.filter((i) => isItemInCategory(i.cat, targetCat)).length
+}
+
+/** 动态计算当前视图中包含的所有细分分类 */
+const currentSubCategories = computed(() => {
+  const selected = itemCatFilter.value
+  if (selected === '全部') {
+    const set = new Set(store.items.map((i) => i.cat))
+    return Array.from(set)
+  }
+  const group = CATEGORY_GROUPS[selected]
+  if (group && group.length) return group
+  return [selected]
+})
+
 const filteredItems = computed(() => {
   const q = itemSearch.value.trim().toLowerCase()
   const cat = itemCatFilter.value
   return store.items.filter((it) => {
-    const matchCat = cat === '全部' || it.cat === cat
+    const matchCat = isItemInCategory(it.cat, cat)
     const matchName = it.name.toLowerCase().includes(q)
     const matchAlias = it.aliases?.some((a) => a.toLowerCase().includes(q))
     const matchQ = !q || matchName || matchAlias
@@ -90,7 +128,7 @@ function exportItemsJson() {
         <!-- 分类选择 Pills -->
         <div class="row" style="gap: 6px; flex-wrap: wrap">
           <button
-            v-for="c in ['全部', '道具', '装备', '兽诀', '宝石', '消耗品', '宠装', '其他']"
+            v-for="c in mainCategoryList"
             :key="c"
             type="button"
             class="pill-btn"
@@ -98,8 +136,8 @@ function exportItemsJson() {
             @click="itemCatFilter = c"
           >
             {{ c }}
-            <span v-if="c !== '全部'" class="pill-count">
-              {{ store.items.filter((i) => i.cat === c).length }}
+            <span class="pill-count">
+              {{ getItemCountForCat(c) }}
             </span>
           </button>
         </div>
@@ -112,6 +150,21 @@ function exportItemsJson() {
             placeholder="🔍 搜索道具名称或拼音 (如 金柳露 / 强化石)..."
           />
         </div>
+      </div>
+
+      <!-- 细分子分类 Tags (当选择主分类时快速筛选) -->
+      <div v-if="currentSubCategories.length > 1" class="sub-cats-row row" style="gap: 4px; flex-wrap: wrap; margin-top: -2px">
+        <span class="muted" style="font-size: 11px; font-weight: 600">细分:</span>
+        <button
+          v-for="sub in currentSubCategories"
+          :key="sub"
+          type="button"
+          class="sub-cat-chip"
+          :class="{ active: itemCatFilter === sub }"
+          @click="itemCatFilter = sub"
+        >
+          {{ sub }} ({{ store.items.filter((i) => i.cat === sub).length }})
+        </button>
       </div>
 
       <!-- 单个新增道具卡片 -->
@@ -253,6 +306,27 @@ function exportItemsJson() {
 .pill-count {
   font-size: 10px;
   opacity: 0.8;
+}
+
+.sub-cat-chip {
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.sub-cat-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.sub-cat-chip.active {
+  background: color-mix(in oklch, var(--accent) 15%, var(--surface));
+  color: var(--accent);
+  border-color: var(--accent);
+  font-weight: 700;
 }
 
 .search-input {
