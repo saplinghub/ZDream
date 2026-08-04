@@ -26,9 +26,39 @@ export interface ItemDict {
   name: string
   cat: ItemCategory
   price: number
+  iconUrl?: string
+  aliases?: string[]
 }
 
-export type ItemCategory = '道具' | '装备' | '消耗品' | '梦幻币' | '宠装' | '兽诀' | '宝石' | '其他'
+export type ItemCategory =
+  | '五宝'
+  | '打造材料'
+  | '点化材料'
+  | '召唤兽用品'
+  | '宝石'
+  | '低级召唤兽内丹'
+  | '高级召唤兽内丹'
+  | '低级魔兽要诀'
+  | '高级魔兽要诀'
+  | '环装'
+  | '变身卡'
+  | '孩子用品'
+  | '珍珠'
+  | '灵饰指南书'
+  | '元灵晶石'
+  | '精魄灵石'
+  | '召唤兽胚子'
+  | '点化石'
+  | '归墟之证'
+  | '杂货'
+  | '特殊'
+  | '道具'
+  | '装备'
+  | '消耗品'
+  | '梦幻币'
+  | '宠装'
+  | '兽诀'
+  | '其他'
 
 /** 游戏收支子类型 */
 export type GameSubType = '日常' | '副本' | '摆摊' | '打造' | '炼妖' | '其他'

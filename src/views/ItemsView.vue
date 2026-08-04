@@ -21,7 +21,9 @@ const filteredItems = computed(() => {
   const cat = itemCatFilter.value
   return store.items.filter((it) => {
     const matchCat = cat === '全部' || it.cat === cat
-    const matchQ = !q || it.name.toLowerCase().includes(q)
+    const matchName = it.name.toLowerCase().includes(q)
+    const matchAlias = it.aliases?.some((a) => a.toLowerCase().includes(q))
+    const matchQ = !q || matchName || matchAlias
     return matchCat && matchQ
   })
 })
@@ -160,8 +162,15 @@ function exportItemsJson() {
       >
         <div class="item-card-main">
           <div class="item-name-row">
-            <b class="item-title">{{ it.name }}</b>
+            <div class="row" style="gap: 8px; align-items: center">
+              <img v-if="it.iconUrl" :src="it.iconUrl" class="grid-item-icon" alt="" />
+              <b class="item-title">{{ it.name }}</b>
+            </div>
             <span class="cat-tag" :class="`cat-${it.cat}`">{{ it.cat }}</span>
+          </div>
+
+          <div v-if="it.aliases?.length" class="item-aliases-row">
+            <span v-for="alias in it.aliases" :key="alias" class="alias-pill">🏷️ {{ alias }}</span>
           </div>
 
           <div class="item-price-row">
@@ -307,6 +316,31 @@ function exportItemsJson() {
 .cat-tag.cat-宝石 { background: color-mix(in oklch, #ec4899 15%, transparent); color: #ec4899; }
 .cat-tag.cat-装备 { background: color-mix(in oklch, #3b82f6 15%, transparent); color: #3b82f6; }
 .cat-tag.cat-消耗品 { background: color-mix(in oklch, #10b981 15%, transparent); color: #10b981; }
+
+.grid-item-icon {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  border-radius: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 1px;
+}
+
+.item-aliases-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.alias-pill {
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: color-mix(in oklch, var(--accent) 12%, var(--surface));
+  color: var(--accent);
+  font-family: var(--font-mono);
+}
 
 .item-price-row {
   display: flex;

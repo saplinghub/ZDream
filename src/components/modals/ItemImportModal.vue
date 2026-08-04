@@ -9,6 +9,8 @@ export interface ParsedImportItem {
   price: number
   pinyin?: string
   note?: string
+  iconUrl?: string
+  aliases?: string[]
 }
 
 const props = defineProps<{
@@ -42,6 +44,8 @@ const parsedItems = computed<ParsedImportItem[]>(() => {
           price: Number(obj.price || obj.cost || 0),
           pinyin: obj.pinyin ? String(obj.pinyin) : undefined,
           note: obj.note ? String(obj.note) : undefined,
+          iconUrl: obj.iconUrl ? String(obj.iconUrl) : undefined,
+          aliases: Array.isArray(obj.aliases) ? obj.aliases.map(String) : undefined,
         }
       }).filter((it) => it.name)
     } catch {

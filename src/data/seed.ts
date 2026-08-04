@@ -71,13 +71,9 @@ export const seedAccounts: Account[] = [
   },
 ]
 
-export const seedItems: ItemDict[] = [
-  { name: '金柳露', cat: '消耗品', price: 120000 },
-  { name: '元宵', cat: '消耗品', price: 80000 },
-  { name: '高级魔兽要诀', cat: '道具', price: 3500000 },
-  { name: '梦幻币', cat: '梦幻币', price: 1 },
-  { name: '神兜兜', cat: '道具', price: 450000 },
-]
+import { PRESET_ITEMS } from './seedItems'
+
+export const seedItems: ItemDict[] = PRESET_ITEMS
 
 export const seedTemplates: Template[] = [
   {

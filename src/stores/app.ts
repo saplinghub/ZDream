@@ -99,6 +99,19 @@ export const useAppStore = defineStore('app', () => {
   const items = ref<ItemDict[]>(
     bootstrapped ? loadJson(STORAGE.items, seedItems) : structuredClone(seedItems),
   )
+
+  // 自动为数据合并最新的图标与别称 (支持 66, c66 等别称极速检索)
+  import('@/data/seedItems').then(({ PRESET_ITEMS }) => {
+    PRESET_ITEMS.forEach((preset) => {
+      const found = items.value.find((it) => it.name === preset.name)
+      if (found) {
+        if (!found.iconUrl && preset.iconUrl) found.iconUrl = preset.iconUrl
+        if ((!found.aliases || !found.aliases.length) && preset.aliases) found.aliases = preset.aliases
+      } else {
+        items.value.push({ ...preset })
+      }
+    })
+  })
   const templates = ref<Template[]>(
     bootstrapped ? loadJson(STORAGE.templates, seedTemplates) : structuredClone(seedTemplates),
   )
@@ -480,6 +493,8 @@ export const useAppStore = defineStore('app', () => {
         name: it.name,
         cat: it.cat,
         price: it.price,
+        iconUrl: it.iconUrl,
+        aliases: it.aliases,
       }))
       toast(`已重置加载全量预设词典 (${PRESET_ITEMS.length} 种道具)`)
     })

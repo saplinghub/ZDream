@@ -90,9 +90,12 @@ const candidateList = computed(() => {
     }
   })
 
-  // 2. 物品词典匹配
+  // 2. 物品词典匹配 (支持名称、别称 66/c66、分类、拼音)
   store.items.forEach((it) => {
-    if (it.name.toLowerCase().includes(q)) {
+    const matchName = it.name.toLowerCase().includes(q)
+    const matchAlias = it.aliases?.some((a) => a.toLowerCase() === q || a.toLowerCase().includes(q))
+    const matchCat = it.cat.toLowerCase().includes(q)
+    if (matchName || matchAlias || matchCat) {
       list.push({ type: 'item', item: it })
     }
   })
@@ -343,9 +346,13 @@ defineExpose({ focusInput, handleEsc })
 
             <!-- 物品词典类型 -->
             <template v-else>
-              <span class="cand-icon">📦</span>
+              <img v-if="item.item.iconUrl" :src="item.item.iconUrl" class="cand-icon-img" alt="" />
+              <span v-else class="cand-icon">📦</span>
               <div class="cand-info">
-                <div class="cand-title">{{ item.item.name }}</div>
+                <div class="cand-title">
+                  {{ item.item.name }}
+                  <span v-if="item.item.aliases?.length" class="cand-alias-sub">({{ item.item.aliases.slice(0, 2).join(', ') }})</span>
+                </div>
                 <div class="cand-sub">参考价: {{ item.item.price ? item.item.price.toLocaleString() : '自填' }}</div>
               </div>
               <span class="cand-tag item-tag">{{ item.item.cat }}</span>
@@ -693,6 +700,24 @@ defineExpose({ focusInput, handleEsc })
   font-size: 16px;
   line-height: 1;
   flex-shrink: 0;
+}
+
+.cand-icon-img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  flex-shrink: 0;
+  border-radius: 4px;
+  background: var(--surface);
+  padding: 1px;
+  border: 1px solid var(--border);
+}
+
+.cand-alias-sub {
+  font-size: 10px;
+  color: var(--accent);
+  margin-left: 4px;
+  font-weight: 500;
 }
 
 .cand-info {
