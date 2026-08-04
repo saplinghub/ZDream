@@ -23,7 +23,7 @@ export async function openFloat(): Promise<void> {
     try { await existing.unminimize() } catch { /* ignore */ }
     try {
       const { LogicalSize } = await import('@tauri-apps/api/dpi')
-      await existing.setSize(new LogicalSize(360, 520))
+      await existing.setSize(new LogicalSize(360, 720))
     } catch { /* ignore */ }
     await existing.show()
     await existing.setFocus()
@@ -37,10 +37,10 @@ export async function openFloat(): Promise<void> {
     url: floatUrl('/float'),
     title: '梦金囊',
     width: 360,
-    height: 520,
+    height: 720,
     minWidth: 48,
     minHeight: 48,
-    resizable: false,
+    resizable: true,
     decorations: false,
     transparent: true,
     shadow: false,
