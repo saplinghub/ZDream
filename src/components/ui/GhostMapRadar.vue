@@ -45,7 +45,6 @@ const sandboxStyle = computed(() => {
 
   const styleObj: Record<string, string> = {
     width: '100%',
-    maxHeight: '260px',
     aspectRatio: `${maxW} / ${maxH}`,
   }
 
