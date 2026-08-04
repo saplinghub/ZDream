@@ -6,6 +6,7 @@ export interface GhostMapItem {
   maxHeight: number
   entryPos: { x: number; y: number }
   bgTheme: string
+  mapImgUrl?: string
 }
 
 export const GHOST_MAPS: GhostMapItem[] = [
@@ -29,12 +30,13 @@ export const GHOST_MAPS: GhostMapItem[] = [
   },
   {
     name: '建邺城',
-    aliases: ['jy', 'jianye', 'jycn'],
+    aliases: ['jy', 'jianye', 'jycn', '建业城', 'jyc'],
     routeGuide: '✈️ 飞行符直达建邺城（中心 60,80）/ 导标旗（衙门/海产店）',
     maxWidth: 280,
     maxHeight: 140,
     entryPos: { x: 60, y: 80 },
     bgTheme: 'linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%)',
+    mapImgUrl: '/maps/建邺城.jpg',
   },
   {
     name: '朱紫国',

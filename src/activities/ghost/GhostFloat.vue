@@ -153,41 +153,43 @@ defineExpose({ handleEsc })
       </div>
     </div>
 
-    <!-- 2. 当前地图与战术卡片 -->
+    <!-- 2. 当前地图与战术卡片 (上半部分：真实地图沙盘；下半部分：关键信息与控制) -->
     <div v-if="ghostStore.currentTask" class="task-card card stack">
-      <div class="row-between">
-        <span class="map-target">
-          📍 <b>{{ ghostStore.currentTask.mapName }}</b>
-          <span v-if="ghostStore.currentTask.posX" class="pos-num">
-            ({{ ghostStore.currentTask.posX }}, {{ ghostStore.currentTask.posY }})
-          </span>
-        </span>
-        <span
-          class="tactics-badge"
-          :style="{ backgroundColor: ghostStore.currentTask.tactics.badgeColor }"
-        >
-          {{ ghostStore.currentTask.tactics.type }}
-        </span>
-      </div>
-
-      <!-- 路线与策略建议 -->
-      <div class="guide-box">
-        <div class="guide-row">
-          <span class="label">🚀 路线：</span>
-          <span class="val">{{ ghostStore.currentTask.routeGuide }}</span>
-        </div>
-        <div class="guide-row" style="margin-top: 4px">
-          <span class="label">💡 战术：</span>
-          <span class="val">{{ ghostStore.currentTask.tactics.desc }}</span>
-        </div>
-      </div>
-
-      <!-- 可视化地图雷达与 鬼怪刷新搜索范围圈沙盘 -->
+      <!-- 上半部分：真实地图沙盘与双层概率框选 -->
       <GhostMapRadar
         :map-name="ghostStore.currentTask.mapName"
         :pos-x="ghostStore.currentTask.posX"
         :pos-y="ghostStore.currentTask.posY"
       />
+
+      <!-- 下半部分：识别出的关键信息与策略建议 -->
+      <div class="task-info-section stack">
+        <div class="row-between">
+          <span class="map-target">
+            📍 <b>{{ ghostStore.currentTask.mapName }}</b>
+            <span v-if="ghostStore.currentTask.posX" class="pos-num">
+              ({{ ghostStore.currentTask.posX }}, {{ ghostStore.currentTask.posY }})
+            </span>
+          </span>
+          <span
+            class="tactics-badge"
+            :style="{ backgroundColor: ghostStore.currentTask.tactics.badgeColor }"
+          >
+            {{ ghostStore.currentTask.tactics.type }}
+          </span>
+        </div>
+
+        <div class="guide-box">
+          <div class="guide-row">
+            <span class="label">🚀 路线：</span>
+            <span class="val">{{ ghostStore.currentTask.routeGuide }}</span>
+          </div>
+          <div class="guide-row" style="margin-top: 4px">
+            <span class="label">💡 战术：</span>
+            <span class="val">{{ ghostStore.currentTask.tactics.desc }}</span>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- 初始空状态说明 -->
