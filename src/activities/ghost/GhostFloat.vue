@@ -123,6 +123,20 @@ function toggleVoiceInput() {
   }
 }
 
+async function triggerCapture() {
+  if (isTauri()) {
+    try {
+      const { emit } = await import('@tauri-apps/api/event')
+      await emit('capture:trigger')
+      appStore.toast('📸 已唤起全屏截图，请拖拽框选')
+    } catch {
+      appStore.toast('📸 请按 Ctrl+A 触发截图')
+    }
+  } else {
+    appStore.toast('网页端模式，请在桌面客户端使用截图识别')
+  }
+}
+
 /** 键盘 ESC 清理支持 */
 function handleEsc() {
   if (inputText.value || ghostStore.currentTask) {
@@ -231,14 +245,23 @@ defineExpose({ handleEsc })
         @keydown.enter="handleInput"
       />
       <button
+        class="btn btn-secondary btn-xs cap-btn"
+        type="button"
+        @click="triggerCapture"
+        title="主动点击截屏并拖拽框选识别"
+      >
+        📸 截图
+      </button>
+      <button
         class="btn btn-secondary btn-xs mic-btn"
         :class="{ recording: isRecording }"
         type="button"
         @click="toggleVoiceInput"
+        title="按热键或点击语音识别坐标"
       >
-        {{ isRecording ? '🎙️' : '🎙️' }}
+        {{ isRecording ? '🔴 录音中...' : '🎙️ 语音' }}
       </button>
-      <button class="btn btn-primary btn-xs" type="button" @click="handleInput">
+      <button class="btn btn-primary btn-xs btn-locate" type="button" @click="handleInput">
         定位
       </button>
     </div>

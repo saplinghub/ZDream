@@ -125,6 +125,10 @@ onMounted(() => {
 
         // 自动展开/呼出悬浮球窗口
         import('@/composables/useGlobalHotkey').then((m) => m.triggerFloatOpen())
+        // 主动触发截图监听
+        listen('capture:trigger', () => {
+          runOcrCapture()
+        })
       })
     })
   }

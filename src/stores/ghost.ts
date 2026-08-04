@@ -46,7 +46,35 @@ const STORAGE_LAST_GHOST_KEY = 'mhxy-zdream:ghost-last-start'
 const STORAGE_LAPS_KEY = 'mhxy-zdream:ghost-laps'
 const STORAGE_HISTORY_KEY = 'mhxy-zdream:ghost-history-sessions'
 
+/** 将文本中的中文数字 (如 "四十五"、"七十二"、"一百二十六"、"一十五") 转换为阿拉伯数字 ("45", "72", "126", "15") */
+export function normalizeChineseNumbers(text: string): string {
+  if (!text) return ''
+  const cnDigits: Record<string, number> = {
+    '零': 0, '〇': 0, '一': 1, '二': 2, '两': 2, '三': 3, '四': 4,
+    '五': 5, '六': 6, '七': 7, '八': 8, '九': 9
+  }
 
+  return text.replace(/([零一二两三四五六七八九十百]{2,})/g, (match) => {
+    let total = 0
+    let temp = 0
+    for (let i = 0; i < match.length; i++) {
+      const char = match[i]
+      if (cnDigits[char] !== undefined) {
+        temp = cnDigits[char]
+        if (i === match.length - 1) total += temp
+      } else if (char === '十') {
+        if (temp === 0) temp = 1
+        total += temp * 10
+        temp = 0
+      } else if (char === '百') {
+        if (temp === 0) temp = 1
+        total += temp * 100
+        temp = 0
+      }
+    }
+    return total > 0 ? String(total) : match
+  })
+}
 
 export const useGhostStore = defineStore('ghost', () => {
   const ringIndex = ref<number>(Number(localStorage.getItem(STORAGE_RING_KEY) || 1))
@@ -157,11 +185,11 @@ export const useGhostStore = defineStore('ghost', () => {
 
   /**
    * 极速解析文本/拼音/OCR 识别字符串
-   * 示例："傲来国 120 45" / "al 120 45" / "地府 60 40 防鬼" / "建业城45,87午时三刻捣蛋鬼"
+   * 示例："傲来国 120 45" / "al 120 45" / "地府 60 40 防鬼" / "建业城45,87午时三刻捣蛋鬼" / "建业城四十五,七十二"
    */
   function parseAndSet(text: string): boolean {
     rawInput.value = text
-    const clean = text.trim()
+    const clean = normalizeChineseNumbers(text.trim()) || text.trim()
     if (!clean) return false
 
     // 1. 解析鬼怪类型

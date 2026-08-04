@@ -39,8 +39,15 @@ const activeMapImg = computed(() => {
   return ''
 })
 
-/** 镜头模式：true 为 1/3 局部特写镜头 (以坐标为中心)，false 为 全景视角 */
-const isLensZoom = ref(true)
+/** 镜头模式：仅【大唐境外】默认开启 1/3 局部特写，其余地图默认全景 */
+const isLensZoom = ref(props.mapName === '大唐境外' || props.mapName === '境外')
+
+watch(
+  () => props.mapName,
+  (name) => {
+    isLensZoom.value = (name === '大唐境外' || name === '境外')
+  },
+)
 
 function toggleLensMode() {
   isLensZoom.value = !isLensZoom.value

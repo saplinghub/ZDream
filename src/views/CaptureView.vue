@@ -40,6 +40,20 @@ if (isTauri()) {
   })
 }
 
+import { onMounted, onUnmounted } from 'vue'
+
+onMounted(() => {
+  window.addEventListener('mousemove', onMove)
+  window.addEventListener('mouseup', onUp)
+  window.addEventListener('keydown', onKey)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('mousemove', onMove)
+  window.removeEventListener('mouseup', onUp)
+  window.removeEventListener('keydown', onKey)
+})
+
 function onDown(e: MouseEvent) {
   if (done.value || working.value) return
   dragging.value = true
@@ -48,7 +62,7 @@ function onDown(e: MouseEvent) {
 }
 
 function onMove(e: MouseEvent) {
-  if (!dragging.value) return
+  if (!dragging.value || done.value || working.value) return
   const x = Math.min(start.value.x, e.clientX)
   const y = Math.min(start.value.y, e.clientY)
   box.value = {
@@ -71,11 +85,14 @@ async function onUp() {
 
 async function recognize() {
   const img = imgEl.value
-  if (!img) return
+  if (!img) {
+    closeWin()
+    return
+  }
   working.value = true
   try {
     // 坐标换算：clientX/Y 是窗口像素（=逻辑像素），截图是物理像素
-    const ratio = imgNatural.value.w / img.clientWidth
+    const ratio = imgNatural.value.w / (img.clientWidth || window.innerWidth || 1)
     const sx = box.value.x * ratio
     const sy = box.value.y * ratio
     const sw = box.value.w * ratio
@@ -97,7 +114,7 @@ async function recognize() {
     const result = await recognizeImage(b64, { apiKey: baiduApiKey, secretKey: baiduSecretKey })
     logger.info('ocr', `OCR 成功，识别到 ${result.lines.length} 行文字`)
 
-    // 结果发回主窗口
+    // 结果发回主窗口与悬浮窗
     const { emit } = await import('@tauri-apps/api/event')
     await emit(RESULT_EVENT, {
       ok: true,
@@ -127,10 +144,15 @@ function onKey(e: KeyboardEvent) {
   if (e.key === 'Escape') closeWin()
 }
 
-function closeWin() {
-  import('@tauri-apps/api/webviewWindow').then(({ getCurrentWebviewWindow }) => {
-    getCurrentWebviewWindow().close()
-  })
+async function closeWin() {
+  try {
+    const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow')
+    const win = getCurrentWebviewWindow()
+    await win.hide().catch(() => {})
+    await win.close().catch(() => {})
+  } catch {
+    window.close()
+  }
 }
 </script>
 
@@ -152,8 +174,12 @@ function closeWin() {
     <div class="cap-dim" v-if="box.w > 0" :style="{ left: box.x + 'px', top: Math.max(0, box.y - 26) + 'px' }">
       {{ Math.round(box.w) }} × {{ Math.round(box.h) }}
     </div>
-    <div class="cap-hint">
+    <div class="cap-hint" v-if="!working">
       拖拽框选识别区域 · Esc 取消
+    </div>
+    <div class="cap-loading" v-if="working">
+      <div class="cap-spinner">⚡</div>
+      <span>正在 OCR 识别中...</span>
     </div>
   </div>
 </template>
