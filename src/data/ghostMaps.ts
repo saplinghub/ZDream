@@ -104,7 +104,7 @@ export const GHOST_MAPS: GhostMapItem[] = [
     maxHeight: 118,
     entryPos: { x: 500, y: 60 },
     bgTheme: 'linear-gradient(135deg, #713f12 0%, #451a03 100%)',
-    mapImgUrl: '/maps/大唐境外.png',
+    mapImgUrl: '/maps/大唐境外.jpg',
   },
   {
     name: '大唐郊外',
