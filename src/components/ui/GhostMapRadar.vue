@@ -45,12 +45,13 @@ const sandboxStyle = computed(() => {
 
   const styleObj: Record<string, string> = {
     width: '100%',
+    maxHeight: '320px',
     aspectRatio: `${maxW} / ${maxH}`,
   }
 
   if (activeMapImg.value) {
     styleObj.backgroundImage = `url(${activeMapImg.value})`
-    styleObj.backgroundSize = '100% 100%'
+    styleObj.backgroundSize = 'contain'
     styleObj.backgroundPosition = 'center'
     styleObj.backgroundRepeat = 'no-repeat'
   } else {

@@ -46,7 +46,6 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (timerInterval) clearInterval(timerInterval)
-  ghostStore.clearTask()
 })
 
 // 自动监听 OCR
@@ -252,6 +251,13 @@ defineExpose({ handleEsc })
   flex-direction: column;
   gap: 8px;
   padding: 4px;
+  max-height: 100%;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.ghost-clean-container::-webkit-scrollbar {
+  display: none;
 }
 
 .clean-header {

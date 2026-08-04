@@ -1,7 +1,7 @@
 {
   "name": "zdream",
   "private": true,
-  "version": "0.4.22",
+  "version": "0.4.23",
   "description": "梦金囊 · 梦幻西游多开财务记账（Tauri 桌面）",
   "type": "module",
   "scripts": {
