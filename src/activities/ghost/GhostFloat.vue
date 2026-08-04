@@ -1,13 +1,11 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { useGhostStore } from '@/stores/ghost'
 import { useOcrStore } from '@/stores/ocr'
 import { useActivityStore } from '@/stores/activity'
-import { GHOST_MAPS } from '@/data/ghostMaps'
-import GhostMapRadar from '@/components/ui/GhostMapRadar.vue'
-
 import { isTauri } from '@/platform/desktop'
+import GhostMapRadar from '@/components/ui/GhostMapRadar.vue'
 
 const appStore = useAppStore()
 const ghostStore = useGhostStore()
@@ -17,8 +15,16 @@ const activityStore = useActivityStore()
 const inputText = ref('')
 const isRecording = ref(false)
 
+// 定时递增总计时秒数
+const timerNow = ref(Date.now())
+let timerInterval: ReturnType<typeof setInterval> | null = null
+
 onMounted(() => {
   activityStore.switchTo('ghost')
+
+  timerInterval = setInterval(() => {
+    timerNow.value = Date.now()
+  }, 1000)
 
   if (isTauri()) {
     import('@tauri-apps/api/event').then(({ listen }) => {
@@ -28,7 +34,9 @@ onMounted(() => {
           const ok = ghostStore.parseAndSet(payload.text)
           if (ok) {
             activityStore.switchTo('ghost')
-            appStore.toast(`👻 已识别抓鬼任务：${ghostStore.currentTask?.mapName} (${ghostStore.currentTask?.posX}, ${ghostStore.currentTask?.posY})`)
+            appStore.toast(
+              `👻 [抓鬼定位] ${ghostStore.currentTask?.mapName} (${ghostStore.currentTask?.posX}, ${ghostStore.currentTask?.posY})`,
+            )
           }
         }
       })
@@ -36,24 +44,44 @@ onMounted(() => {
   }
 })
 
-// 自动同步 OCR 最新识别文本
+onUnmounted(() => {
+  if (timerInterval) clearInterval(timerInterval)
+})
+
+// 自动监听 OCR
 watch(
   () => ocrStore.result?.lines,
   (lines) => {
     if (!lines || !lines.length) return
     const fullText = lines.join('\n')
-    console.info('[GhostFloat] Received OCR text:', fullText)
-
     const ok = ghostStore.parseAndSet(fullText)
     if (ok) {
       activityStore.switchTo('ghost')
-      appStore.toast(`👻 已识别抓鬼任务：${ghostStore.currentTask?.mapName} (${ghostStore.currentTask?.posX}, ${ghostStore.currentTask?.posY})`)
-    } else {
-      console.warn('[GhostFloat] Failed to parse ghost map/pos from OCR text:', fullText)
+      appStore.toast(
+        `👻 [抓鬼定位] ${ghostStore.currentTask?.mapName} (${ghostStore.currentTask?.posX}, ${ghostStore.currentTask?.posY})`,
+      )
     }
   },
   { immediate: true, deep: true },
 )
+
+/** 格式化整轮计时 (MM:SS) */
+const sessionTimerFormatted = computed(() => {
+  if (ghostStore.sessionStatus !== 'running' || !ghostStore.sessionStartTime) return '00:00'
+  const elapsedSec = Math.max(0, Math.floor((timerNow.value - ghostStore.sessionStartTime) / 1000))
+  const m = Math.floor(elapsedSec / 60)
+  const s = elapsedSec % 60
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+})
+
+/** 本只鬼已消耗时间 */
+const curGhostSecondsFormatted = computed(() => {
+  if (ghostStore.sessionStatus !== 'running' || !ghostStore.lastGhostStartTime) return '0秒'
+  const elapsedSec = Math.max(0, Math.floor((timerNow.value - ghostStore.lastGhostStartTime) / 1000))
+  const m = Math.floor(elapsedSec / 60)
+  const s = elapsedSec % 60
+  return m > 0 ? `${m}分${s}秒` : `${s}秒`
+})
 
 function handleInput() {
   if (!inputText.value.trim()) return
@@ -61,64 +89,34 @@ function handleInput() {
   if (ok) {
     inputText.value = ''
   } else {
-    appStore.toast('无法识别地图，请输入拼音简称（如 al 120 45 / zw 80 150）')
+    appStore.toast('未匹配到地图，示例：jy 120 45')
   }
 }
 
-function handleQuickMap(alias: string) {
-  inputText.value = `${alias} `
-}
-
-function handleAddReward(itemName: string, price: number) {
-  const activeAcct = appStore.accounts.find((a) => a.online) || appStore.accounts[0]
-  if (!activeAcct) {
-    appStore.toast('请先在顶部选定在线角色账号')
-    return
-  }
-  appStore.addGameRecord({
-    accountId: activeAcct.id,
-    item: itemName,
-    qty: 1,
-    price,
-    io: 'in',
-    sub: '日常',
-  })
-  appStore.toast(`✅ 抓鬼奖励入账：${itemName} (+${price.toLocaleString('zh-CN')}两)`)
-}
-
-// 模拟语音说话测试（若 Web Speech API 不可用提供微型拾音模拟）
 function toggleVoiceInput() {
   if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-    appStore.toast('当前浏览器未开放语音接口，可直接输入拼音全拼/简拼（如 al 120 45）')
+    appStore.toast('当前环境不支持语音识别')
     return
   }
   try {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     const recognition = new SpeechRecognition()
     recognition.lang = 'zh-CN'
-    recognition.interimResults = false
-
-    if (isRecording.value) {
-      isRecording.value = false
-      return
-    }
+    recognition.continuous = false
 
     isRecording.value = true
-    appStore.toast('🎙️ 正在聆听... 请说出地图和坐标（如：傲来国 120 45）')
-
     recognition.onresult = (event: any) => {
-      const speechResult = event.results[0][0].transcript
       isRecording.value = false
+      const speechResult = event.results[0][0].transcript
       inputText.value = speechResult
       ghostStore.parseAndSet(speechResult)
       appStore.toast(`🎙️ 语音已识别: "${speechResult}"`)
     }
-
     recognition.onerror = () => {
       isRecording.value = false
       appStore.toast('语音识别超时，请重试')
     }
-
     recognition.start()
   } catch {
     isRecording.value = false
@@ -140,330 +138,263 @@ defineExpose({ handleEsc })
 </script>
 
 <template>
-  <div class="ghost-float stack">
-    <!-- 1. 抓鬼轮次 1~10 环 Header -->
-    <div class="ring-bar">
-      <div class="ring-title-row">
-        <span class="ring-title">
-          👻 抓鬼轮次：<b>第 {{ ghostStore.ringIndex }} / 10 环</b>
+  <div class="ghost-clean-container stack">
+    <!-- 1. 精简极速 Header (抓鬼会话控制 & 计时) -->
+    <div class="clean-header row-between">
+      <div class="row" style="gap: 8px; align-items: center">
+        <span class="header-title">👻 抓鬼模式</span>
+        <span
+          class="timer-badge"
+          :class="{ active: ghostStore.sessionStatus === 'running' }"
+        >
+          ⏱️ {{ sessionTimerFormatted }}
         </span>
-
-        <div class="ring-controls">
-          <button class="btn btn-xs" type="button" @click="ghostStore.prevRing" title="上一环">
-            ‹
-          </button>
-          <button class="btn btn-xs" type="button" @click="ghostStore.resetRing" title="重置为第1环">
-            重置
-          </button>
-          <button class="btn btn-primary btn-xs" type="button" @click="ghostStore.nextRing">
-            下一环 ›
-          </button>
-        </div>
       </div>
 
-      <!-- 1-10 环 Pills 进度 -->
-      <div class="ring-pills">
+      <div class="row" style="gap: 6px; align-items: center">
+        <button
+          v-if="ghostStore.sessionStatus !== 'running'"
+          class="btn btn-primary btn-xs"
+          type="button"
+          @click="ghostStore.startSession"
+        >
+          ▶ 开始抓鬼
+        </button>
+        <button
+          v-else
+          class="btn btn-secondary btn-xs btn-stop"
+          type="button"
+          @click="ghostStore.endSession"
+          title="结束本轮抓鬼并归集数据到动态流"
+        >
+          ⏹ 结束归集
+        </button>
+      </div>
+    </div>
+
+    <!-- 2. 1~10 环 Pill 进度行 (极简高精视效) -->
+    <div class="ring-pills-bar row-between">
+      <span class="ring-label">第 <b>{{ ghostStore.ringIndex }}</b> / 10 环</span>
+      <div class="pills-track row" style="gap: 3px">
         <button
           v-for="i in 10"
           :key="i"
           type="button"
-          class="ring-pill"
+          class="ring-pill-dot"
           :class="{ active: ghostStore.ringIndex === i, tenth: i === 10 }"
           @click="ghostStore.setRingIndex(i)"
         >
           {{ i }}
         </button>
       </div>
-
-      <!-- 第 10 环大奖提醒 Banner -->
-      <div v-if="ghostStore.isTenthRing" class="tenth-alert">
-        🎯 <b>第 10 环终点！</b>请检查双三倍时间，准备领取 80级环装/暗光/内丹！
-      </div>
     </div>
 
-    <!-- 2. 当前地图与战术卡片 (上半部分：真实地图沙盘；下半部分：关键信息与控制) -->
-    <div v-if="ghostStore.currentTask" class="task-card card stack">
-      <!-- 上半部分：真实地图沙盘与双层概率框选 -->
+    <!-- 3. 上半部分：高清地图沙盘 (核心视觉占 70% 高度，无杂乱说明) -->
+    <div v-if="ghostStore.currentTask" class="radar-card">
       <GhostMapRadar
         :map-name="ghostStore.currentTask.mapName"
         :pos-x="ghostStore.currentTask.posX"
         :pos-y="ghostStore.currentTask.posY"
       />
-
-      <!-- 下半部分：识别出的关键信息与策略建议 -->
-      <div class="task-info-section stack">
-        <div class="row-between">
-          <span class="map-target">
-            📍 <b>{{ ghostStore.currentTask.mapName }}</b>
-            <span v-if="ghostStore.currentTask.posX" class="pos-num">
-              ({{ ghostStore.currentTask.posX }}, {{ ghostStore.currentTask.posY }})
-            </span>
-          </span>
-          <span
-            class="tactics-badge"
-            :style="{ backgroundColor: ghostStore.currentTask.tactics.badgeColor }"
-          >
-            {{ ghostStore.currentTask.tactics.type }}
-          </span>
-        </div>
-
-        <div class="guide-box">
-          <div class="guide-row">
-            <span class="label">🚀 路线：</span>
-            <span class="val">{{ ghostStore.currentTask.routeGuide }}</span>
-          </div>
-          <div class="guide-row" style="margin-top: 4px">
-            <span class="label">💡 战术：</span>
-            <span class="val">{{ ghostStore.currentTask.tactics.desc }}</span>
-          </div>
-        </div>
-      </div>
     </div>
 
-    <!-- 初始空状态说明 -->
-    <div v-else class="empty-task card">
-      <span class="muted">
-        📍 暂无坐标，直接用快捷键 <b><kbd>Ctrl</kbd>+<kbd>A</kbd></b> 截图任务框，或下方手敲简拼 (如 <code>al 120 45</code>)
+    <!-- 未截图/空任务引导 -->
+    <div v-else class="empty-sandbox-card" @click="ghostStore.startSession">
+      <span class="empty-icon">🎯</span>
+      <span class="empty-text">按 <b><kbd>Ctrl</kbd>+<kbd>A</kbd></b> 截图或下方手敲坐标 (如 <code>jy 120 45</code>)</span>
+    </div>
+
+    <!-- 4. 下半部分：极简核心结果大字行 -->
+    <div v-if="ghostStore.currentTask" class="result-bar row-between">
+      <div class="target-headline row" style="gap: 8px; align-items: center">
+        <span class="map-name-lg">📍 {{ ghostStore.currentTask.mapName }}</span>
+        <span class="pos-lg">({{ ghostStore.currentTask.posX }}, {{ ghostStore.currentTask.posY }})</span>
+        <span
+          class="ghost-type-chip"
+          :style="{ backgroundColor: ghostStore.currentTask.tactics.badgeColor }"
+        >
+          {{ ghostStore.currentTask.ghostType }}
+        </span>
+      </div>
+
+      <span class="lap-timer-tag">
+        ⏱️ 本只: {{ curGhostSecondsFormatted }}
       </span>
     </div>
 
-    <!-- 3. 极速输入框与语音通道 -->
-    <div class="input-bar">
+    <!-- 5. 底部极简快速输入行 -->
+    <div class="quick-input-bar row" style="gap: 6px">
       <input
         v-model="inputText"
-        class="input ghost-input"
-        placeholder="输入拼音或坐标 (如 al 120 45 / 傲来 120 45)..."
+        class="input ghost-input-clean"
+        placeholder="输入简拼/坐标 (如 jy 126 89)..."
         @keydown.enter="handleInput"
       />
-
       <button
-        class="btn btn-secondary btn-sm mic-btn"
+        class="btn btn-secondary btn-xs mic-btn"
         :class="{ recording: isRecording }"
         type="button"
-        title="语音识别"
         @click="toggleVoiceInput"
       >
-        {{ isRecording ? '🎙️ 听...' : '🎙️' }}
+        {{ isRecording ? '🎙️' : '🎙️' }}
       </button>
-
-      <button class="btn btn-primary btn-sm" type="button" @click="handleInput">
+      <button class="btn btn-primary btn-xs" type="button" @click="handleInput">
         定位
       </button>
-    </div>
-
-    <!-- 常用地图快捷缩写 Pills -->
-    <div class="quick-maps">
-      <span class="muted" style="font-size: 10px">快捷简拼:</span>
-      <button v-for="m in GHOST_MAPS.slice(0, 7)" :key="m.name" type="button" class="btn btn-xs map-chip" @click="handleQuickMap(m.aliases[0])">
-        {{ m.aliases[0] }} {{ m.name }}
-      </button>
-    </div>
-
-    <!-- 4. 第 10 环奖励快捷记账 (仅在第 10 环展示) -->
-    <div v-if="ghostStore.isTenthRing" class="reward-bar stack">
-      <div class="reward-head">💰 第 10 环产出一键记账：</div>
-      <div class="reward-chips">
-        <button type="button" class="reward-btn" @click="handleAddReward('80级环装武器', 400000)">
-          🗡️ 80武器 (+40万)
-        </button>
-        <button type="button" class="reward-btn" @click="handleAddReward('80级环装防具', 350000)">
-          🛡️ 80防具 (+35万)
-        </button>
-        <button type="button" class="reward-btn" @click="handleAddReward('牡丹', 50000)">
-          🌸 牡丹 (+5万)
-        </button>
-        <button type="button" class="reward-btn" @click="handleAddReward('玫瑰', 300000)">
-          🌹 玫瑰 (+30万)
-        </button>
-      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.ghost-float {
-  padding: 10px;
-  gap: 10px;
-  box-sizing: border-box;
-}
-
-.ring-bar {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 10px;
+.ghost-clean-container {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+  padding: 4px;
 }
 
-.ring-title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.clean-header {
+  padding: 2px 4px;
 }
 
-.ring-title {
+.header-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--fg);
+}
+
+.timer-badge {
   font-size: 12px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+.timer-badge.active {
+  background: color-mix(in oklch, var(--accent) 15%, var(--surface));
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
-.ring-controls {
-  display: flex;
-  gap: 4px;
+.btn-stop {
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.4);
 }
 
-.ring-pills {
-  display: flex;
-  gap: 3px;
-  justify-content: space-between;
+.ring-pills-bar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  border-radius: 6px;
 }
 
-.ring-pill {
-  flex: 1;
-  padding: 2px 0;
-  font-size: 10px;
+.ring-label {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.ring-pill-dot {
+  width: 18px;
+  height: 18px;
   border-radius: 4px;
   border: 1px solid var(--border);
   background: var(--bg);
-  color: var(--muted);
+  color: var(--fg);
+  font-size: 10px;
+  font-weight: 700;
   cursor: pointer;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: all 0.15s ease;
 }
-.ring-pill.active {
+.ring-pill-dot.active {
   background: var(--accent);
   color: #fff;
   border-color: var(--accent);
-  font-weight: 700;
 }
-.ring-pill.tenth {
+.ring-pill-dot.tenth {
   border-color: #f59e0b;
+  color: #f59e0b;
 }
-.ring-pill.tenth.active {
+.ring-pill-dot.tenth.active {
   background: #f59e0b;
   color: #fff;
 }
 
-.tenth-alert {
-  font-size: 11px;
-  padding: 4px 8px;
-  background: color-mix(in oklch, #f59e0b 20%, transparent);
-  border: 1px solid #f59e0b;
+.radar-card {
   border-radius: 6px;
-  color: #f59e0b;
-  text-align: center;
-  animation: pulse 1.5s infinite;
+  overflow: hidden;
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
-}
-
-.task-card {
-  padding: 10px;
-  border: 1px solid var(--border);
+.empty-sandbox-card {
+  height: 160px;
+  border: 2px dashed var(--border);
   border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   background: var(--surface);
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+.empty-sandbox-card:hover {
+  border-color: var(--accent);
 }
 
-.map-target {
+.empty-icon {
+  font-size: 28px;
+}
+
+.empty-text {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.result-bar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+.map-name-lg {
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--fg);
+}
+
+.pos-lg {
   font-size: 14px;
   font-weight: 800;
-}
-.pos-num {
+  font-family: var(--font-mono);
   color: var(--accent);
-  margin-left: 4px;
 }
 
-.tactics-badge {
+.ghost-type-chip {
   font-size: 10px;
+  font-weight: 800;
+  color: #fff;
   padding: 2px 6px;
   border-radius: 4px;
-  color: #fff;
+}
+
+.lap-timer-tag {
+  font-size: 11px;
+  color: #f59e0b;
   font-weight: 700;
+  font-family: var(--font-mono);
 }
 
-.guide-box {
-  background: var(--bg);
-  padding: 6px 8px;
-  border-radius: 6px;
-  font-size: 11px;
-  margin-top: 6px;
-}
-.guide-row {
-  display: flex;
-}
-.guide-row .label {
-  color: var(--muted);
-  white-space: nowrap;
-}
-.guide-row .val {
-  color: var(--fg);
-  font-weight: 500;
-}
-
-.empty-task {
-  padding: 12px;
-  text-align: center;
-  font-size: 11px;
-}
-
-.input-bar {
-  display: flex;
-  gap: 6px;
-}
-.ghost-input {
-  flex: 1;
+.ghost-input-clean {
   font-size: 12px;
   padding: 4px 8px;
-}
-.mic-btn.recording {
-  background: var(--danger);
-  color: #fff;
-  animation: pulse 1s infinite;
-}
-
-.quick-maps {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-.map-chip {
-  padding: 1px 5px;
-  font-size: 10px;
-}
-
-.reward-bar {
-  background: color-mix(in oklch, var(--accent) 10%, var(--surface));
-  border: 1px dashed var(--accent);
-  border-radius: 8px;
-  padding: 8px;
-  gap: 6px;
-}
-.reward-head {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--accent);
-}
-.reward-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.reward-btn {
-  padding: 3px 8px;
-  font-size: 10px;
-  border-radius: 4px;
-  border: 1px solid var(--accent);
-  background: var(--surface);
-  color: var(--fg);
-  cursor: pointer;
-  font-weight: 600;
-  transition: all 0.15s ease;
-}
-.reward-btn:hover {
-  background: var(--accent);
-  color: #fff;
+  border-radius: 6px;
 }
 </style>

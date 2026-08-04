@@ -1,6 +1,8 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { GHOST_MAPS, GHOST_TACTICS_MAP, findGhostMap, type GhostMapItem, type GhostTactics } from '@/data/ghostMaps'
+import { useAppStore } from '@/stores/app'
+import { uid } from '@/utils/format'
 
 export interface GhostTaskState {
   ringIndex: number // 1 ~ 10
@@ -11,10 +13,38 @@ export interface GhostTaskState {
   routeGuide: string
   tactics: GhostTactics
   timestamp: number
+  lapSeconds?: number // 本只鬼消耗时间(秒)
+}
+
+export interface GhostLapRecord {
+  id: string
+  ringIndex: number
+  mapName: string
+  posX: number
+  posY: number
+  ghostType: string
+  durationSeconds: number
+  timestamp: number
+}
+
+export interface GhostSessionSummary {
+  id: string
+  startTime: number
+  endTime: number
+  totalDurationSeconds: number
+  totalGhosts: number
+  avgSecondsPerGhost: number
+  fastestGhostSeconds: number
+  laps: GhostLapRecord[]
 }
 
 const STORAGE_RING_KEY = 'mhxy-zdream:ghost-ring'
 const STORAGE_TASK_KEY = 'mhxy-zdream:ghost-task'
+const STORAGE_STATUS_KEY = 'mhxy-zdream:ghost-session-status'
+const STORAGE_START_KEY = 'mhxy-zdream:ghost-session-start'
+const STORAGE_LAST_GHOST_KEY = 'mhxy-zdream:ghost-last-start'
+const STORAGE_LAPS_KEY = 'mhxy-zdream:ghost-laps'
+const STORAGE_HISTORY_KEY = 'mhxy-zdream:ghost-history-sessions'
 
 function loadTaskFromStorage(): GhostTaskState | null {
   try {
@@ -30,6 +60,77 @@ export const useGhostStore = defineStore('ghost', () => {
   const ringIndex = ref<number>(Number(localStorage.getItem(STORAGE_RING_KEY) || 1))
   const currentTask = ref<GhostTaskState | null>(loadTaskFromStorage())
   const rawInput = ref('')
+
+  // ── ⏱️ 抓鬼会话状态与单只鬼耗时追踪 ──
+  const sessionStatus = ref<'idle' | 'running'>(
+    (localStorage.getItem(STORAGE_STATUS_KEY) as 'idle' | 'running') || 'idle'
+  )
+  const sessionStartTime = ref<number>(Number(localStorage.getItem(STORAGE_START_KEY) || 0))
+  const lastGhostStartTime = ref<number>(Number(localStorage.getItem(STORAGE_LAST_GHOST_KEY) || 0))
+  const lapRecords = ref<GhostLapRecord[]>(
+    JSON.parse(localStorage.getItem(STORAGE_LAPS_KEY) || '[]')
+  )
+  const historySessions = ref<GhostSessionSummary[]>(
+    JSON.parse(localStorage.getItem(STORAGE_HISTORY_KEY) || '[]')
+  )
+
+  /** 手动开启抓鬼计费/会话 */
+  function startSession() {
+    sessionStatus.value = 'running'
+    sessionStartTime.value = Date.now()
+    lastGhostStartTime.value = Date.now()
+    lapRecords.value = []
+    saveSessionStorage()
+  }
+
+  /** 结束抓鬼会话并归集数据到动态系统 */
+  function endSession() {
+    if (sessionStatus.value === 'running') {
+      const now = Date.now()
+      const totalDurationSeconds = Math.max(1, Math.round((now - (sessionStartTime.value || now)) / 1000))
+      const totalGhosts = lapRecords.value.length
+      const avgSecondsPerGhost = totalGhosts > 0 ? Math.round(totalDurationSeconds / totalGhosts) : 0
+      const fastestGhostSeconds =
+        lapRecords.value.length > 0 ? Math.min(...lapRecords.value.map((l) => l.durationSeconds)) : 0
+
+      const summary: GhostSessionSummary = {
+        id: uid(),
+        startTime: sessionStartTime.value || now,
+        endTime: now,
+        totalDurationSeconds,
+        totalGhosts,
+        avgSecondsPerGhost,
+        fastestGhostSeconds,
+        laps: [...lapRecords.value],
+      }
+
+      historySessions.value.unshift(summary)
+      localStorage.setItem(STORAGE_HISTORY_KEY, JSON.stringify(historySessions.value.slice(0, 50)))
+
+      // 自动归集推送到主界面动态流 (Live Events)
+      const appStore = useAppStore()
+      const durationText = formatMinutesSeconds(totalDurationSeconds)
+      const avgText = formatMinutesSeconds(avgSecondsPerGhost)
+      appStore.pushEvent('sys', `👻 [抓鬼总结] 完成 ${totalGhosts} 环 · 总耗时 ${durationText} (平均 ${avgText}/只)`)
+    }
+
+    sessionStatus.value = 'idle'
+    sessionStartTime.value = 0
+    lastGhostStartTime.value = 0
+    lapRecords.value = []
+    currentTask.value = null
+    saveSessionStorage()
+    try {
+      localStorage.removeItem(STORAGE_TASK_KEY)
+    } catch { /* ignore */ }
+  }
+
+  function saveSessionStorage() {
+    localStorage.setItem(STORAGE_STATUS_KEY, sessionStatus.value)
+    localStorage.setItem(STORAGE_START_KEY, String(sessionStartTime.value))
+    localStorage.setItem(STORAGE_LAST_GHOST_KEY, String(lastGhostStartTime.value))
+    localStorage.setItem(STORAGE_LAPS_KEY, JSON.stringify(lapRecords.value))
+  }
 
   function setRingIndex(idx: number) {
     ringIndex.value = Math.max(1, Math.min(10, idx))
@@ -59,7 +160,7 @@ export const useGhostStore = defineStore('ghost', () => {
 
   /**
    * 极速解析文本/拼音/OCR 识别字符串
-   * 示例："傲来国 120 45" / "al 120 45" / "地府 60 40 防鬼" / "近闻在【大唐境外】有鬼魂作祟(80, 150) 马面"
+   * 示例："傲来国 120 45" / "al 120 45" / "地府 60 40 防鬼" / "建业城45,87午时三刻捣蛋鬼"
    */
   function parseAndSet(text: string): boolean {
     rawInput.value = text
@@ -88,7 +189,6 @@ export const useGhostStore = defineStore('ghost', () => {
     let posY = 0
 
     if (numMatches && numMatches.length >= 2) {
-      // 避开“第 5 环”里的环数 5，优先找后两个数字
       let idx = 0
       if (ringMatch && numMatches[0] === ringMatch[1] && numMatches.length >= 3) {
         idx = 1
@@ -100,10 +200,8 @@ export const useGhostStore = defineStore('ghost', () => {
     // 4. 解析地图 (三重保障策略)
     let targetMap: GhostMapItem | null = null
 
-    // 4.1 直接对全文本运行 findGhostMap
     targetMap = findGhostMap(clean)
 
-    // 4.2 若未直接命中，逐词匹配
     if (!targetMap) {
       const tokens = clean.split(/[\s,，()（）[\]【】:\n]+/).filter(Boolean)
       for (const token of tokens) {
@@ -115,7 +213,6 @@ export const useGhostStore = defineStore('ghost', () => {
       }
     }
 
-    // 4.3 最后的底线：遍历全量地图名与别名进行文本包含检索
     if (!targetMap) {
       for (const m of GHOST_MAPS) {
         if (clean.includes(m.name)) {
@@ -129,8 +226,30 @@ export const useGhostStore = defineStore('ghost', () => {
       }
     }
 
-    // 若找到地图，则组装当前任务状态
+    // 若找到地图，组装任务并进行耗时埋点
     if (targetMap) {
+      const now = Date.now()
+
+      // ⏱️ 如果尚未处于开始状态，自动触发开始抓鬼计时！
+      if (sessionStatus.value !== 'running') {
+        startSession()
+      } else if (currentTask.value) {
+        // 如果之前已有上一只鬼，计算上一只鬼的消耗时间并记入圈数日志
+        const lapSec = Math.max(1, Math.round((now - (lastGhostStartTime.value || now)) / 1000))
+        lapRecords.value.push({
+          id: uid(),
+          ringIndex: currentTask.value.ringIndex,
+          mapName: currentTask.value.mapName,
+          posX: currentTask.value.posX,
+          posY: currentTask.value.posY,
+          ghostType: currentTask.value.ghostType,
+          durationSeconds: lapSec,
+          timestamp: now,
+        })
+        lastGhostStartTime.value = now
+        saveSessionStorage()
+      }
+
       const tactics = GHOST_TACTICS_MAP[ghostType] || GHOST_TACTICS_MAP['未知']
       currentTask.value = {
         ringIndex: ringIndex.value,
@@ -140,11 +259,13 @@ export const useGhostStore = defineStore('ghost', () => {
         ghostType,
         routeGuide: targetMap.routeGuide,
         tactics,
-        timestamp: Date.now(),
+        timestamp: now,
       }
+
       try {
         localStorage.setItem(STORAGE_TASK_KEY, JSON.stringify(currentTask.value))
       } catch { /* ignore */ }
+
       return true
     }
 
@@ -165,7 +286,14 @@ export const useGhostStore = defineStore('ghost', () => {
     ringIndex,
     currentTask,
     rawInput,
+    sessionStatus,
+    sessionStartTime,
+    lastGhostStartTime,
+    lapRecords,
+    historySessions,
     isTenthRing,
+    startSession,
+    endSession,
     setRingIndex,
     nextRing,
     prevRing,
@@ -174,3 +302,11 @@ export const useGhostStore = defineStore('ghost', () => {
     clearTask,
   }
 })
+
+function formatMinutesSeconds(sec: number): string {
+  if (!sec) return '0秒'
+  const m = Math.floor(sec / 60)
+  const s = sec % 60
+  if (m === 0) return `${s}秒`
+  return `${m}分${s}秒`
+}
