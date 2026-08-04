@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { useGhostStore } from '@/stores/ghost'
 import { useOcrStore } from '@/stores/ocr'
-import { GHOST_MAPS } from '@/data/ghostMaps'
-
-import GhostMapRadar from '@/components/ui/GhostMapRadar.vue'
 import { useActivityStore } from '@/stores/activity'
+import { GHOST_MAPS } from '@/data/ghostMaps'
+import GhostMapRadar from '@/components/ui/GhostMapRadar.vue'
 
 const appStore = useAppStore()
 const ghostStore = useGhostStore()
@@ -16,18 +15,24 @@ const activityStore = useActivityStore()
 const inputText = ref('')
 const isRecording = ref(false)
 
-// 自动同步 OCR 最新识别文本 (仅在开启抓鬼模式下生效)
+onMounted(() => {
+  activityStore.switchTo('ghost')
+})
+
+// 自动同步 OCR 最新识别文本
 watch(
   () => ocrStore.result?.lines,
   (lines) => {
-    if (activityStore.currentId !== 'ghost') return
+    if (!lines || !lines.length) return
+    const fullText = lines.join('\n')
+    console.info('[GhostFloat] Received OCR text:', fullText)
 
-    if (lines && lines.length) {
-      const fullText = lines.join('\n')
-      const ok = ghostStore.parseAndSet(fullText)
-      if (ok) {
-        appStore.toast('已识别抓鬼任务坐标与地图！')
-      }
+    const ok = ghostStore.parseAndSet(fullText)
+    if (ok) {
+      activityStore.switchTo('ghost')
+      appStore.toast(`👻 已识别抓鬼任务：${ghostStore.currentTask?.mapName} (${ghostStore.currentTask?.posX}, ${ghostStore.currentTask?.posY})`)
+    } else {
+      console.warn('[GhostFloat] Failed to parse ghost map/pos from OCR text:', fullText)
     }
   },
   { immediate: true, deep: true },

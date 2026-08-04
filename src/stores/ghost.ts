@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { GHOST_TACTICS_MAP, findGhostMap, type GhostMapItem, type GhostTactics } from '@/data/ghostMaps'
+import { GHOST_MAPS, GHOST_TACTICS_MAP, findGhostMap, type GhostMapItem, type GhostTactics } from '@/data/ghostMaps'
 
 export interface GhostTaskState {
   ringIndex: number // 1 ~ 10
@@ -86,22 +86,36 @@ export const useGhostStore = defineStore('ghost', () => {
       posY = Number(numMatches[idx + 1])
     }
 
-    // 4. 解析地图
+    // 4. 解析地图 (三重保障策略)
     let targetMap: GhostMapItem | null = null
 
-    // 先用空格/分隔符切分词组
-    const tokens = clean.split(/[\s,，()（）[\]【】]+/).filter(Boolean)
-    for (const token of tokens) {
-      const found = findGhostMap(token)
-      if (found) {
-        targetMap = found
-        break
+    // 4.1 直接对全文本运行 findGhostMap
+    targetMap = findGhostMap(clean)
+
+    // 4.2 若未直接命中，逐词匹配
+    if (!targetMap) {
+      const tokens = clean.split(/[\s,，()（）[\]【】:\n]+/).filter(Boolean)
+      for (const token of tokens) {
+        const found = findGhostMap(token)
+        if (found) {
+          targetMap = found
+          break
+        }
       }
     }
 
-    // 如果未切分出，全文本匹配地图名
+    // 4.3 最后的底线：遍历全量地图名与别名进行文本包含检索
     if (!targetMap) {
-      targetMap = findGhostMap(clean)
+      for (const m of GHOST_MAPS) {
+        if (clean.includes(m.name)) {
+          targetMap = m
+          break
+        }
+        if (m.aliases.some((a) => a.length >= 2 && clean.toLowerCase().includes(a.toLowerCase()))) {
+          targetMap = m
+          break
+        }
+      }
     }
 
     // 若找到地图，则组装当前任务状态

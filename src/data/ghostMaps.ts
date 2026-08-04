@@ -215,18 +215,20 @@ export const GHOST_TACTICS_MAP: Record<string, GhostTactics> = {
   },
 }
 
-/** 拼音简拼快速查找地图 */
+/** 拼音简拼/中文全文本快速查找地图 */
 export function findGhostMap(input: string): GhostMapItem | null {
   const clean = input.trim().toLowerCase()
   if (!clean) return null
 
-  // 1. 完全匹配地图名称
-  const exact = GHOST_MAPS.find((m) => m.name === clean || m.name.includes(clean))
-  if (exact) return exact
+  // 1. 优先完全匹配或相互包含
+  const match = GHOST_MAPS.find((m) => {
+    const nameLower = m.name.toLowerCase()
+    if (clean === nameLower) return true
+    if (clean.includes(nameLower)) return true
+    if (nameLower.includes(clean)) return true
+    if (m.aliases.some((a) => clean === a || clean.includes(a) || a.includes(clean))) return true
+    return false
+  })
 
-  // 2. 拼音简拼匹配 (如 al, ca, zw, wz)
-  const byAlias = GHOST_MAPS.find((m) => m.aliases.includes(clean))
-  if (byAlias) return byAlias
-
-  return null
+  return match || null
 }
