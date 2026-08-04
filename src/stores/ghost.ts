@@ -54,17 +54,22 @@ export const useGhostStore = defineStore('ghost', () => {
   const rawInput = ref('')
 
   // ── ⏱️ 抓鬼会话状态与单只鬼耗时追踪 ──
-  const sessionStatus = ref<'idle' | 'running'>(
-    (localStorage.getItem(STORAGE_STATUS_KEY) as 'idle' | 'running') || 'idle'
-  )
-  const sessionStartTime = ref<number>(Number(localStorage.getItem(STORAGE_START_KEY) || 0))
-  const lastGhostStartTime = ref<number>(Number(localStorage.getItem(STORAGE_LAST_GHOST_KEY) || 0))
-  const lapRecords = ref<GhostLapRecord[]>(
-    JSON.parse(localStorage.getItem(STORAGE_LAPS_KEY) || '[]')
-  )
+  // 重启软件或重进模式时，会话计时状态始终保持干净初始态 (非运行中)
+  const sessionStatus = ref<'idle' | 'running'>('idle')
+  const sessionStartTime = ref<number>(0)
+  const lastGhostStartTime = ref<number>(0)
+  const lapRecords = ref<GhostLapRecord[]>([])
   const historySessions = ref<GhostSessionSummary[]>(
     JSON.parse(localStorage.getItem(STORAGE_HISTORY_KEY) || '[]')
   )
+
+  // 清理历史上残存的挂起会话状态
+  try {
+    localStorage.removeItem(STORAGE_STATUS_KEY)
+    localStorage.removeItem(STORAGE_START_KEY)
+    localStorage.removeItem(STORAGE_LAST_GHOST_KEY)
+    localStorage.removeItem(STORAGE_LAPS_KEY)
+  } catch { /* ignore */ }
 
   /** 手动开启抓鬼计费/会话 */
   function startSession() {
