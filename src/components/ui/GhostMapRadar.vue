@@ -39,26 +39,99 @@ const activeMapImg = computed(() => {
   return ''
 })
 
-const sandboxStyle = computed(() => {
+/** 镜头模式：true 为 1/3 局部特写镜头 (以坐标为中心)，false 为 全景视角 */
+const isLensZoom = ref(true)
+
+function toggleLensMode() {
+  isLensZoom.value = !isLensZoom.value
+}
+
+/** 1/3 镜头外框视口尺寸 */
+const lensViewportStyle = computed(() => {
   const maxW = mapConfig.value.maxWidth || 280
   const maxH = mapConfig.value.maxHeight || 140
   const mapRatio = maxW / maxH
 
   const maxContainerW = 335
-  const maxContainerH = 280
+  const maxContainerH = 260
 
-  let width = maxContainerW
-  let height = Math.round(width / mapRatio)
+  let baseW = maxContainerW
+  let baseH = Math.round(baseW / mapRatio)
 
-  if (height > maxContainerH) {
-    height = maxContainerH
-    width = Math.round(height * mapRatio)
+  if (baseH > maxContainerH) {
+    baseH = maxContainerH
+    baseW = Math.round(baseH * mapRatio)
+  }
+
+  // 1/3 特写模式下，如果高度过矮，适度提拉高度以清爽展示
+  const viewH = isLensZoom.value ? Math.min(260, Math.max(140, baseH * 1.6)) : baseH
+
+  return {
+    width: `${baseW}px`,
+    height: `${viewH}px`,
+    margin: '0 auto',
+  }
+})
+
+/** 1/3 镜头内画板尺寸与 Smooth 偏移位移 */
+const lensCanvasStyle = computed(() => {
+  const maxW = mapConfig.value.maxWidth || 280
+  const maxH = mapConfig.value.maxHeight || 140
+  const mapRatio = maxW / maxH
+
+  const maxContainerW = 335
+  const maxContainerH = 260
+
+  let baseW = maxContainerW
+  let baseH = Math.round(baseW / mapRatio)
+
+  if (baseH > maxContainerH) {
+    baseH = maxContainerH
+    baseW = Math.round(baseH * mapRatio)
+  }
+
+  if (!isLensZoom.value) {
+    const styleObj: Record<string, string> = {
+      width: '100%',
+      height: '100%',
+      transform: 'none',
+    }
+    if (activeMapImg.value) {
+      styleObj.backgroundImage = `url(${activeMapImg.value})`
+      styleObj.backgroundSize = '100% 100%'
+      styleObj.backgroundPosition = 'center'
+      styleObj.backgroundRepeat = 'no-repeat'
+    } else {
+      styleObj.background = mapConfig.value.bgTheme || 'linear-gradient(135deg, #0f172a 0%, #020617 100%)'
+    }
+    return styleObj
+  }
+
+  // 1/3 特写模式：宽度放大 300% (3倍)，高清清晰度
+  const canvasW = baseW * 3
+  const canvasH = Math.round(canvasW / mapRatio)
+
+  // 归一化 X 坐标比例 (0 ~ 1)
+  const px = Math.max(0, Math.min(maxW, props.posX)) / maxW
+  // 视口在 1/6 ~ 5/6 之间平滑平移，靠边缘时锁定在两侧 1/3 区域
+  const cx = Math.max(1 / 6, Math.min(5 / 6, px))
+  // 内框平移量 (0px ~ 2 * baseW px)
+  const shiftX = Math.round((cx - 1 / 6) * (baseW * 3))
+
+  // 归一化 Y 坐标比例
+  const py = 1 - Math.max(0, Math.min(maxH, props.posY)) / maxH
+  const viewH = Math.min(260, Math.max(140, baseH * 1.6))
+  let shiftY = 0
+  if (canvasH > viewH) {
+    const cy = Math.max(viewH / (2 * canvasH), Math.min(1 - viewH / (2 * canvasH), py))
+    shiftY = Math.round(cy * canvasH - viewH / 2)
   }
 
   const styleObj: Record<string, string> = {
-    width: `${width}px`,
-    height: `${height}px`,
-    margin: '0 auto',
+    width: `${canvasW}px`,
+    height: `${canvasH}px`,
+    transform: `translate(-${shiftX}px, -${shiftY}px)`,
+    transition: 'transform 0.25s ease-out',
   }
 
   if (activeMapImg.value) {
@@ -87,11 +160,7 @@ const targetPercent = computed(() => {
   return { left, top }
 })
 
-
-
-/**
- * 1. 浅红虚线框：最大可能出现范围 (±50 坐标)
- */
+/** 最大可能出现范围 (±50) 边界百分比 */
 const outerBox = computed(() => {
   const maxW = mapConfig.value.maxWidth || 280
   const maxH = mapConfig.value.maxHeight || 140
@@ -106,12 +175,10 @@ const outerBox = computed(() => {
   const width = Math.round(((maxX - minX) / maxW) * 100)
   const height = Math.round(((maxY - minY) / maxH) * 100)
 
-  return { minX, maxX, minY, maxY, left, top, width, height }
+  return { left, top, width, height }
 })
 
-/**
- * 2. 🎯 金红高亮实框：75% 核心高概率热区 (±25 坐标 + 边界贴边偏置)
- */
+/** 75% 核心高概率热区 (±25 坐标 + 智能边界贴边偏置) */
 const coreHotspotBox = computed(() => {
   const maxW = mapConfig.value.maxWidth || 280
   const maxH = mapConfig.value.maxHeight || 140
@@ -121,20 +188,21 @@ const coreHotspotBox = computed(() => {
   let minY = props.posY - 25
   let maxY = props.posY + 25
 
-  if (props.posX <= 50) {
-    minX = Math.max(0, props.posX - 40)
-    maxX = Math.min(maxW, props.posX + 15)
-  } else if (props.posX >= maxW - 50) {
-    minX = Math.max(0, props.posX - 15)
-    maxX = Math.min(maxW, props.posX + 40)
+  if (minX < 0) {
+    maxX = Math.min(maxW, maxX + Math.abs(minX))
+    minX = 0
   }
-
-  if (props.posY <= 40) {
-    minY = Math.max(0, props.posY - 40)
-    maxY = Math.min(maxH, props.posY + 15)
-  } else if (props.posY >= maxH - 40) {
-    minY = Math.max(0, props.posY - 15)
-    maxY = Math.min(maxH, props.posY + 40)
+  if (maxX > maxW) {
+    minX = Math.max(0, minX - (maxX - maxW))
+    maxX = maxW
+  }
+  if (minY < 0) {
+    maxY = Math.min(maxH, maxY + Math.abs(minY))
+    minY = 0
+  }
+  if (maxY > maxH) {
+    minY = Math.max(0, minY - (maxY - maxH))
+    maxY = maxH
   }
 
   minX = Math.max(0, minX)
@@ -147,53 +215,63 @@ const coreHotspotBox = computed(() => {
   const width = Math.round(((maxX - minX) / maxW) * 100)
   const height = Math.round(((maxY - minY) / maxH) * 100)
 
-  return { minX, maxX, minY, maxY, left, top, width, height }
+  return { left, top, width, height }
 })
 </script>
 
 <template>
   <div class="ghost-radar-pure">
-    <!-- 纯粹高精地图沙盘 (无冗余文字) -->
-    <div class="radar-sandbox" :style="sandboxStyle">
-      <!-- 坐标网格背景线条 (当无背景图片时降级质感) -->
-      <div v-if="!activeMapImg" class="grid-lines" />
+    <!-- 顶部 1/3 特写与全景控制条 -->
+    <div class="radar-lens-bar">
+      <span class="lens-title">🧭 {{ mapConfig.name }}</span>
+      <button class="lens-toggle-btn" @click="toggleLensMode" :title="isLensZoom ? '切换为全图全景' : '切换为以坐标为中心的 1/3 局部特写'">
+        {{ isLensZoom ? '🔍 1/3 局部特写' : '🌐 全景视图' }}
+      </button>
+    </div>
 
-      <!-- 1. 浅红虚线框：最大可能出现范围 (±50 坐标框) -->
-      <div
-        class="outer-boundary-box"
-        :style="{
-          left: `${outerBox.left}%`,
-          top: `${outerBox.top}%`,
-          width: `${outerBox.width}%`,
-          height: `${outerBox.height}%`,
-        }"
-        title="最大可能刷新范围 (±50 坐标)"
-      >
-        <span class="outer-tag">最大范围 (±50)</span>
-      </div>
+    <!-- 1/3 镜头特写视口 -->
+    <div class="radar-viewport" :style="lensViewportStyle">
+      <div class="radar-sandbox" :style="lensCanvasStyle">
+        <!-- 坐标网格背景线条 (当无背景图片时降级质感) -->
+        <div v-if="!activeMapImg" class="grid-lines" />
 
-      <!-- 2. 🔴 金红高亮实框：75% 核心高概率热区 (±25 坐标 + 边界贴边偏置) -->
-      <div
-        class="core-hotspot-box"
-        :style="{
-          left: `${coreHotspotBox.left}%`,
-          top: `${coreHotspotBox.top}%`,
-          width: `${coreHotspotBox.width}%`,
-          height: `${coreHotspotBox.height}%`,
-        }"
-        title="75% 核心高概率刷新热区"
-      >
-        <span class="core-tag">🔥 75% 高概率热区</span>
-      </div>
+        <!-- 1. 浅红虚线框：最大可能出现范围 (±50 坐标框) -->
+        <div
+          class="outer-boundary-box"
+          :style="{
+            left: `${outerBox.left}%`,
+            top: `${outerBox.top}%`,
+            width: `${outerBox.width}%`,
+            height: `${outerBox.height}%`,
+          }"
+          title="最大可能刷新范围 (±50 坐标)"
+        >
+          <span class="outer-tag">最大范围 (±50)</span>
+        </div>
 
-      <!-- 3. 钟馗提示中心点准星 PIN (🎯) -->
-      <div
-        class="point-marker target-point"
-        :style="{ left: `${targetPercent.left}%`, top: `${targetPercent.top}%` }"
-        :title="`钟馗提示坐标: (${posX}, ${posY})`"
-      >
-        <span class="point-pin">🎯</span>
-        <span class="point-label target-label">({{ posX }}, {{ posY }})</span>
+        <!-- 2. 🔴 金红高亮实框：75% 核心高概率热区 (±25 坐标) -->
+        <div
+          class="core-hotspot-box"
+          :style="{
+            left: `${coreHotspotBox.left}%`,
+            top: `${coreHotspotBox.top}%`,
+            width: `${coreHotspotBox.width}%`,
+            height: `${coreHotspotBox.height}%`,
+          }"
+          title="75% 核心高概率刷新热区"
+        >
+          <span class="core-tag">🔥 75% 高概率热区</span>
+        </div>
+
+        <!-- 3. 钟馗提示中心点准星 PIN (🎯) -->
+        <div
+          class="point-marker target-point"
+          :style="{ left: `${targetPercent.left}%`, top: `${targetPercent.top}%` }"
+          :title="`钟馗提示坐标: (${posX}, ${posY})`"
+        >
+          <span class="point-pin">🎯</span>
+          <span class="point-label target-label">({{ posX }}, {{ posY }})</span>
+        </div>
       </div>
     </div>
   </div>
@@ -204,14 +282,47 @@ const coreHotspotBox = computed(() => {
   width: 100%;
 }
 
-.radar-sandbox {
+.radar-lens-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1px 4px 5px 4px;
+}
+
+.lens-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.lens-toggle-btn {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--accent);
+  border: 1px solid color-mix(in oklch, var(--accent) 35%, var(--border));
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.lens-toggle-btn:hover {
+  background: color-mix(in oklch, var(--accent) 20%, var(--surface));
+  border-color: var(--accent);
+}
+
+.radar-viewport {
   position: relative;
-  width: 100%;
-  border-radius: 8px;
   overflow: hidden;
+  border-radius: 8px;
   border: 1px solid color-mix(in oklch, var(--accent) 40%, var(--border));
   box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.7);
-  transition: all 0.3s ease;
+  background: #020617;
+}
+
+.radar-sandbox {
+  position: relative;
+  box-sizing: border-box;
 }
 
 /* 网格背景线 */
