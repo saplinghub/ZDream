@@ -23,9 +23,13 @@ import {
   unregisterGlobalShortcut,
 } from '@/composables/useGlobalHotkey'
 import { runOcrCapture } from '@/ocr/runner'
+import { useGhostStore } from '@/stores/ghost'
+import { useActivityStore } from '@/stores/activity'
 
 const store = useAppStore()
 const ocrStore = useOcrStore()
+const ghostStore = useGhostStore()
+const activityStore = useActivityStore()
 const route = useRoute()
 
 const isAuxChrome = computed(() => {
@@ -91,13 +95,24 @@ onMounted(() => {
         ocrStore.clear()
 
         if (payload.ok) {
+          const lines = payload.lines || []
+          const fullText = lines.join('\n')
+          logger.info('ocr', `[OCR 识别文本内容]: ${fullText}`)
+
           ocrStore.setResult({
-            lines: payload.lines || [],
+            lines,
             words: (payload.words || []) as never,
             direction: payload.direction || 0,
             raw: payload.raw,
           })
           ocrStore.capturedImgUrl = payload.capturedImgUrl || ''
+
+          // 自动解析抓鬼任务坐标与地图
+          const isGhostTask = ghostStore.parseAndSet(fullText)
+          if (isGhostTask) {
+            activityStore.switchTo('ghost')
+            store.toast(`👻 [抓鬼定位] ${ghostStore.currentTask?.mapName} (${ghostStore.currentTask?.posX}, ${ghostStore.currentTask?.posY})`)
+          }
         } else {
           ocrStore.setError(payload.error || '未知错误')
           ocrStore.capturedImgUrl = ''
@@ -105,7 +120,6 @@ onMounted(() => {
 
         // 自动展开/呼出悬浮球窗口
         import('@/composables/useGlobalHotkey').then((m) => m.triggerFloatOpen())
-        ocrStore.showAiModal = true
       })
     })
   }
