@@ -42,23 +42,10 @@ const activeMapImg = computed(() => {
 const sandboxStyle = computed(() => {
   const maxW = mapConfig.value.maxWidth || 280
   const maxH = mapConfig.value.maxHeight || 140
-  const mapRatio = maxW / maxH
-
-  const maxContainerW = 335
-  const maxContainerH = 185
-
-  let width = maxContainerW
-  let height = Math.round(width / mapRatio)
-
-  if (height > maxContainerH) {
-    height = maxContainerH
-    width = Math.round(height * mapRatio)
-  }
 
   const styleObj: Record<string, string> = {
-    width: `${width}px`,
-    height: `${height}px`,
-    margin: '0 auto',
+    width: '100%',
+    aspectRatio: `${maxW} / ${maxH}`,
   }
 
   if (activeMapImg.value) {

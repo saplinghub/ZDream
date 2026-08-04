@@ -193,12 +193,34 @@ function autoFocusInput() {
   }
 }
 
+const panelEl = ref<HTMLElement | null>(null)
+let resizeObserver: ResizeObserver | null = null
+
+function syncDynamicWindowSize() {
+  if (collapsed.value || transitioning.value || resizing.value) return
+  if (!panelEl.value) return
+
+  const contentH = panelEl.value.scrollHeight
+  if (contentH > 100) {
+    const targetH = Math.min(850, Math.max(480, contentH + 16))
+    setSize(PANEL_W, targetH)
+  }
+}
+
 onMounted(async () => {
   forceTransparent()
   restoreBallPos()
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('mouseenter', autoFocusInput)
   window.addEventListener('focus', autoFocusInput)
+
+  if (typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(() => {
+      syncDynamicWindowSize()
+    })
+    if (panelEl.value) resizeObserver.observe(panelEl.value)
+  }
+
   if (isTauri()) {
     import('@tauri-apps/api/webviewWindow').then(({ getCurrentWebviewWindow }) => {
       getCurrentWebviewWindow().setAlwaysOnTop(true).catch(() => {})
@@ -237,6 +259,7 @@ onUnmounted(() => {
   window.removeEventListener('mouseenter', autoFocusInput)
   window.removeEventListener('focus', autoFocusInput)
   window.removeEventListener('blur', onBlur)
+  resizeObserver?.disconnect()
   unlistenOpen?.()
 })
 
@@ -369,7 +392,7 @@ async function toggleCollapse() {
     </div>
 
     <!-- 展开态 -->
-    <div v-else key="panel" class="panel">
+    <div v-else key="panel" ref="panelEl" class="panel">
       <div class="p-head" data-tauri-drag-region>
         <span class="p-title">{{ activityStore.current?.name || '梦金囊' }}</span>
         <div style="display:flex;align-items:center;gap:6px">
