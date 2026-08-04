@@ -98,12 +98,13 @@ export const GHOST_MAPS: GhostMapItem[] = [
   },
   {
     name: '大唐境外',
-    aliases: ['zw', 'jingwai', 'dtjw'],
+    aliases: ['zw', 'jingwai', 'dtjw', '境外'],
     routeGuide: '🚩 朱紫国出境外（东部 500,60）或 长安驿站出国境转境外（西部 20,180）',
-    maxWidth: 630,
-    maxHeight: 120,
+    maxWidth: 634,
+    maxHeight: 118,
     entryPos: { x: 500, y: 60 },
     bgTheme: 'linear-gradient(135deg, #713f12 0%, #451a03 100%)',
+    mapImgUrl: '/maps/大唐境外.png',
   },
   {
     name: '大唐郊外',
