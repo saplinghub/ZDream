@@ -40,17 +40,26 @@ const activeMapImg = computed(() => {
 })
 
 const sandboxStyle = computed(() => {
+  const maxW = mapConfig.value.maxWidth || 280
+  const maxH = mapConfig.value.maxHeight || 140
+
+  const styleObj: Record<string, string> = {
+    aspectRatio: `${maxW} / ${maxH}`,
+    maxHeight: '185px',
+    maxWidth: '100%',
+    margin: '0 auto',
+  }
+
   if (activeMapImg.value) {
-    return {
-      backgroundImage: `url(${activeMapImg.value})`,
-      backgroundSize: '100% 100%',
-      backgroundPosition: 'center',
-      backgroundRepeat: 'no-repeat',
-    }
+    styleObj.backgroundImage = `url(${activeMapImg.value})`
+    styleObj.backgroundSize = '100% 100%'
+    styleObj.backgroundPosition = 'center'
+    styleObj.backgroundRepeat = 'no-repeat'
+  } else {
+    styleObj.background = mapConfig.value.bgTheme || 'linear-gradient(135deg, #0f172a 0%, #020617 100%)'
   }
-  return {
-    background: mapConfig.value.bgTheme || 'linear-gradient(135deg, #0f172a 0%, #020617 100%)',
-  }
+
+  return styleObj
 })
 
 /** 目标中心点相对百分比 (0% ~ 100%) */
@@ -187,7 +196,6 @@ const coreHotspotBox = computed(() => {
 .radar-sandbox {
   position: relative;
   width: 100%;
-  height: 165px;
   border-radius: 8px;
   overflow: hidden;
   border: 1px solid color-mix(in oklch, var(--accent) 40%, var(--border));
