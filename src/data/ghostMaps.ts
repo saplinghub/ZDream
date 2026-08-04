@@ -18,6 +18,7 @@ export const GHOST_MAPS: GhostMapItem[] = [
     maxHeight: 150,
     entryPos: { x: 100, y: 70 },
     bgTheme: 'linear-gradient(135deg, #064e3b 0%, #022c22 100%)',
+    mapImgUrl: '/maps/傲来国.jpg',
   },
   {
     name: '长安城',
@@ -64,6 +65,7 @@ export const GHOST_MAPS: GhostMapItem[] = [
     maxHeight: 140,
     entryPos: { x: 80, y: 70 },
     bgTheme: 'linear-gradient(135deg, #831843 0%, #500724 100%)',
+    mapImgUrl: '/maps/西梁女国.jpg',
   },
   {
     name: '长寿村',
@@ -73,6 +75,17 @@ export const GHOST_MAPS: GhostMapItem[] = [
     maxHeight: 210,
     entryPos: { x: 80, y: 100 },
     bgTheme: 'linear-gradient(135deg, #14532d 0%, #052e16 100%)',
+    mapImgUrl: '/maps/长寿村.jpg',
+  },
+  {
+    name: '江南野外',
+    aliases: ['yw', 'yewai', 'jnyw', '野外'],
+    routeGuide: '🚩 建邺城西门 / 长安东门 传送进入江南野外',
+    maxWidth: 160,
+    maxHeight: 120,
+    entryPos: { x: 10, y: 10 },
+    bgTheme: 'linear-gradient(135deg, #15803d 0%, #052e16 100%)',
+    mapImgUrl: '/maps/江南野外.jpg',
   },
   {
     name: '墨家村',
@@ -118,6 +131,7 @@ export const GHOST_MAPS: GhostMapItem[] = [
     maxHeight: 90,
     entryPos: { x: 10, y: 10 },
     bgTheme: 'linear-gradient(135deg, #15803d 0%, #14532d 100%)',
+    mapImgUrl: '/maps/五庄观.jpg',
   },
   {
     name: '阴曹地府',
@@ -136,6 +150,7 @@ export const GHOST_MAPS: GhostMapItem[] = [
     maxHeight: 140,
     entryPos: { x: 5, y: 140 },
     bgTheme: 'linear-gradient(135deg, #9d174d 0%, #500724 100%)',
+    mapImgUrl: '/maps/女儿村.jpg',
   },
   {
     name: '盘丝洞',
@@ -163,6 +178,7 @@ export const GHOST_MAPS: GhostMapItem[] = [
     maxHeight: 120,
     entryPos: { x: 10, y: 10 },
     bgTheme: 'linear-gradient(135deg, #047857 0%, #064e3b 100%)',
+    mapImgUrl: '/maps/普陀山.jpg',
   },
   {
     name: '长寿郊外',
