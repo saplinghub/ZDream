@@ -168,7 +168,7 @@ defineExpose({ handleEsc })
           @click="ghostStore.endSession"
           title="结束本轮抓鬼并归集数据到动态流"
         >
-          ⏹ 结束归集
+          ⏹ 结束
         </button>
       </div>
     </div>

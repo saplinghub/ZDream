@@ -67,17 +67,7 @@ const targetPercent = computed(() => {
   return { left, top }
 })
 
-/** 入口点相对百分比 */
-const entryPercent = computed(() => {
-  const maxW = mapConfig.value.maxWidth || 280
-  const maxH = mapConfig.value.maxHeight || 140
-  const entry = mapConfig.value.entryPos || { x: 110, y: 75 }
 
-  const left = Math.round((entry.x / maxW) * 100)
-  const top = Math.round((1 - entry.y / maxH) * 100)
-
-  return { left, top }
-})
 
 /**
  * 1. 浅红虚线框：最大可能出现范围 (±50 坐标)
@@ -148,19 +138,6 @@ const coreHotspotBox = computed(() => {
       <!-- 坐标网格背景线条 (当无背景图片时降级质感) -->
       <div v-if="!activeMapImg" class="grid-lines" />
 
-      <!-- SVG 传送路线连接虚线 -->
-      <svg class="line-svg">
-        <line
-          :x1="`${entryPercent.left}%`"
-          :y1="`${entryPercent.top}%`"
-          :x2="`${targetPercent.left}%`"
-          :y2="`${targetPercent.top}%`"
-          stroke="#3b82f6"
-          stroke-width="1.5"
-          stroke-dasharray="3 3"
-        />
-      </svg>
-
       <!-- 1. 浅红虚线框：最大可能出现范围 (±50 坐标框) -->
       <div
         class="outer-boundary-box"
@@ -189,17 +166,7 @@ const coreHotspotBox = computed(() => {
         <span class="core-tag">🔥 75% 高概率热区</span>
       </div>
 
-      <!-- 3. 入口/飞行符降落点标记 -->
-      <div
-        class="point-marker entry-point"
-        :style="{ left: `${entryPercent.left}%`, top: `${entryPercent.top}%` }"
-        title="飞行符降落点"
-      >
-        <span class="point-dot entry-dot" />
-        <span class="point-label entry-label">🚀 降落点</span>
-      </div>
-
-      <!-- 4. 钟馗提示中心点准星 PIN (🎯) -->
+      <!-- 3. 钟馗提示中心点准星 PIN (🎯) -->
       <div
         class="point-marker target-point"
         :style="{ left: `${targetPercent.left}%`, top: `${targetPercent.top}%` }"
