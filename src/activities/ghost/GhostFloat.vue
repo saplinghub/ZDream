@@ -105,8 +105,10 @@ function toggleVoiceInput() {
 
 /** 键盘 ESC 清理支持 */
 function handleEsc() {
-  if (inputText.value) {
+  if (inputText.value || ghostStore.currentTask) {
     inputText.value = ''
+    ghostStore.currentTask = null
+    ocrStore.clear()
     return true
   }
   return false

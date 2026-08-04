@@ -4,7 +4,6 @@ import { useAppStore } from '@/stores/app'
 import { useActivityStore } from '@/stores/activity'
 import { useMasterQuestStore, type ShopType } from '@/stores/masterQuest'
 import { useOnlineAccounts } from '@/composables/useOnlineAccounts'
-
 import { useOcrStore } from '@/stores/ocr'
 
 const appStore = useAppStore()
@@ -114,6 +113,36 @@ function onPointerDown(id: string, e: PointerEvent) {
   window.addEventListener('pointerup', onPointerUp)
 }
 
+const ocrStore = useOcrStore()
+const ocrMqTaskMatch = ref<{ name: string; rawText: string } | null>(null)
+
+// 自动监听截图 OCR 结果 (仅在师门模式下生效)
+watch(
+  () => ocrStore.result?.lines,
+  (lines) => {
+    if (activityStore.currentId !== 'master-quest') return
+    if (!lines || !lines.length) return
+
+    const text = lines.join('\n')
+    const matched = appStore.items.find(
+      (it) => text.includes(it.name) || it.aliases?.some((a) => text.toLowerCase().includes(a.toLowerCase()))
+    )
+
+    if (matched) {
+      ocrMqTaskMatch.value = { name: matched.name, rawText: text }
+      activeTab.value = 'shops'
+      shopSearchQuery.value = matched.name
+      appStore.toast(`🧙 师门识别: ${matched.name}，已匹配推荐店铺`)
+    }
+  },
+  { immediate: true, deep: true },
+)
+
+function clearMqOcrMatch() {
+  ocrMqTaskMatch.value = null
+  ocrStore.clear()
+}
+
 function toggleAddShop() {
   showAddShop.value = !showAddShop.value
   if (showAddShop.value) {
@@ -174,6 +203,12 @@ defineExpose({ handleEsc })
       <button class="btn-exit" type="button" title="退出师门模式切回极速记账" @click="exitMode">
         ✕ 退出模式
       </button>
+    </div>
+
+    <!-- 📸 师门 OCR 截图识别任务提示卡片 -->
+    <div v-if="ocrMqTaskMatch" class="ocr-mq-alert row-between" style="background: color-mix(in oklch, var(--accent) 15%, var(--surface)); border: 1px dashed var(--accent); padding: 6px 10px; border-radius: 6px; margin-bottom: 8px">
+      <span style="font-size: 11px; color: var(--fg)">📸 师门识别: <b style="color: var(--accent)">{{ ocrMqTaskMatch.name }}</b> ➔ 已自动搜索匹配店铺</span>
+      <button class="btn btn-xs btn-ghost" type="button" style="color: var(--muted)" @click="clearMqOcrMatch">✕ 清除</button>
     </div>
 
     <!-- 子页面 Tab 切换 -->

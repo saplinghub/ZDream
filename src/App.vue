@@ -24,26 +24,9 @@ import {
 } from '@/composables/useGlobalHotkey'
 import { runOcrCapture } from '@/ocr/runner'
 
-import AiCaptureModal from '@/components/ui/AiCaptureModal.vue'
-
 const store = useAppStore()
 const ocrStore = useOcrStore()
 const route = useRoute()
-
-function onAiCaptureSubmit(payload: { accountId: string; item: string; qty: number; price: number; io: 'in' | 'out'; sub: string }) {
-  const ok = store.addGameRecord({
-    accountId: payload.accountId,
-    item: payload.item,
-    qty: payload.qty,
-    price: payload.price,
-    io: payload.io,
-    sub: payload.sub,
-  })
-  if (ok) {
-    store.toast(`✅ 已记账：${payload.item} × ${payload.qty}`)
-  }
-  ocrStore.showAiModal = false
-}
 
 const isAuxChrome = computed(() => {
   const c = route.meta?.chrome
@@ -174,14 +157,6 @@ onUnmounted(() => {
     <EditRecordModal />
     <!-- 浏览器降级：旧版快捷记账浮层 -->
     <QuickFloat />
-    <AiCaptureModal
-      :show="ocrStore.showAiModal"
-      :img-url="ocrStore.capturedImgUrl"
-      :ocr-lines="ocrStore.result?.lines"
-      :ocr-error="ocrStore.error"
-      @close="ocrStore.showAiModal = false"
-      @submit="onAiCaptureSubmit"
-    />
     <AppToast />
   </template>
 </template>

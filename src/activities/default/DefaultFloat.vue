@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { useActivityStore } from '@/stores/activity'
+import { useOcrStore } from '@/stores/ocr'
 import type { ItemDict } from '@/types'
 
 interface CommandOption {
@@ -15,6 +16,7 @@ interface CommandOption {
 
 const store = useAppStore()
 const activityStore = useActivityStore()
+const ocrStore = useOcrStore()
 
 const itemInput = ref('')
 const selectedIndex = ref(0)
@@ -32,6 +34,53 @@ const qty = ref(1)
 const priceInputRef = ref<HTMLInputElement | null>(null)
 
 const onlineAccounts = computed(() => store.accounts.filter((a) => a.online))
+
+const ocrItemMatch = ref<{ item: ItemDict; rawText: string } | null>(null)
+
+// 自动监听截图 OCR 结果 (仅在通用/无玩法模式下处理)
+watch(
+  () => ocrStore.result?.lines,
+  (lines) => {
+    if (activityStore.currentId) return
+    if (!lines || !lines.length) return
+
+    const fullText = lines.join('\n')
+    const matched = store.items.find(
+      (it) => fullText.includes(it.name) || it.aliases?.some((a) => fullText.toLowerCase().includes(a.toLowerCase()))
+    )
+
+    if (matched) {
+      ocrItemMatch.value = { item: matched, rawText: fullText }
+      store.toast(`📸 截图识别到道具: ${matched.name}`)
+    }
+  },
+  { immediate: true, deep: true },
+)
+
+function confirmOcrRecord(ioType: 'in' | 'out') {
+  if (!ocrItemMatch.value) return
+  const activeAcct = store.accounts.find((a) => a.id === currentAccountId.value) || store.accounts[0]
+  if (!activeAcct) {
+    store.toast('请先选择收支账号')
+    return
+  }
+
+  store.addGameRecord({
+    accountId: activeAcct.id,
+    item: ocrItemMatch.value.item.name,
+    qty: 1,
+    price: ocrItemMatch.value.item.price || 0,
+    io: ioType,
+    sub: ioType === 'in' ? '收入' : '消耗',
+  })
+  store.toast(`✅ 截图识别记账已提交：${ocrItemMatch.value.item.name}`)
+  clearOcrMatch()
+}
+
+function clearOcrMatch() {
+  ocrItemMatch.value = null
+  ocrStore.clear()
+}
 
 onMounted(() => {
   if (onlineAccounts.value.length && !currentAccountId.value) {
@@ -214,9 +263,7 @@ function flash(msg: string) {
   }, 1800)
 }
 
-import { useOcrStore } from '@/stores/ocr'
 import { useActivityContextStore } from '@/stores/activityContext'
-const ocrStore = useOcrStore()
 const activityCtx = useActivityContextStore()
 
 function handleEsc(): boolean {
@@ -307,7 +354,27 @@ defineExpose({ focusInput, handleEsc })
     </div>
 
     <!-- 主交互区域 -->
-    <div class="p-record">
+    <div class="p-record stack" style="gap: 8px">
+      <!-- 📸 截图识别 AI 快速记账卡片 (悬浮窗专属) -->
+      <div v-if="ocrItemMatch" class="search-card" style="border-color: var(--accent)">
+        <div class="search-card-head">
+          <span class="search-card-title">📸 截图识别：<b>{{ ocrItemMatch.item.name }}</b></span>
+          <button type="button" class="btn-cancel" @click="clearOcrMatch">✕ ESC 清理</button>
+        </div>
+        <div class="row" style="gap: 8px; align-items: center; padding: 4px 0">
+          <img v-if="ocrItemMatch.item.iconUrl" :src="ocrItemMatch.item.iconUrl" class="cand-icon-img" alt="" />
+          <span class="muted" style="font-size: 11px">参考价: {{ ocrItemMatch.item.price ? ocrItemMatch.item.price.toLocaleString() : '自填' }}两</span>
+        </div>
+        <div class="row" style="gap: 6px">
+          <button class="btn btn-primary btn-xs" style="flex: 1" type="button" @click="confirmOcrRecord('in')">
+            💰 确认为收入
+          </button>
+          <button class="btn btn-secondary btn-xs" style="flex: 1" type="button" @click="confirmOcrRecord('out')">
+            ⚡ 确认为消耗
+          </button>
+        </div>
+      </div>
+
       <!-- 步骤 1：搜玩法 / 打字记账 卡片 (与步骤 2 参数卡片保持 100% 结构尺寸对齐) -->
       <div v-if="step === 'search'" class="search-card">
         <div class="search-card-head">
