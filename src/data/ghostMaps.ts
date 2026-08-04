@@ -47,6 +47,7 @@ export const GHOST_MAPS: GhostMapItem[] = [
     maxHeight: 110,
     entryPos: { x: 90, y: 55 },
     bgTheme: 'linear-gradient(135deg, #92400e 0%, #713f12 100%)',
+    mapImgUrl: '/maps/朱紫国.jpg',
   },
   {
     name: '宝象国',
@@ -56,6 +57,7 @@ export const GHOST_MAPS: GhostMapItem[] = [
     maxHeight: 120,
     entryPos: { x: 90, y: 60 },
     bgTheme: 'linear-gradient(135deg, #854d0e 0%, #53380b 100%)',
+    mapImgUrl: '/maps/宝象国.jpg',
   },
   {
     name: '西梁女国',
