@@ -20,11 +20,6 @@ export async function openFloat(): Promise<void> {
   const existing = all.find((w) => w.label === FLOAT_WINDOW)
   if (existing) {
     try { await existing.setVisibleOnAllWorkspaces(true) } catch { /* 非 macOS 不支持 */ }
-    try { await existing.unminimize() } catch { /* ignore */ }
-    try {
-      const { LogicalSize } = await import('@tauri-apps/api/dpi')
-      await existing.setSize(new LogicalSize(360, 720))
-    } catch { /* ignore */ }
     await existing.show()
     await existing.setFocus()
     const { emit } = await import('@tauri-apps/api/event')

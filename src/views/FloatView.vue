@@ -171,12 +171,15 @@ function syncDynamicWindowSize() {
   }
 }
 
+let unlistenFocus: (() => void) | null = null
+
 onMounted(async () => {
   forceTransparent()
   restoreBallPos()
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('mouseenter', autoFocusInput)
   window.addEventListener('focus', autoFocusInput)
+  window.addEventListener('blur', onBlur)
 
   if (typeof ResizeObserver !== 'undefined') {
     resizeObserver = new ResizeObserver(() => {
@@ -186,22 +189,27 @@ onMounted(async () => {
   }
 
   if (isTauri()) {
-    import('@tauri-apps/api/webviewWindow').then(({ getCurrentWebviewWindow }) => {
-      getCurrentWebviewWindow().setAlwaysOnTop(true).catch(() => {})
+    import('@tauri-apps/api/webviewWindow').then(async ({ getCurrentWebviewWindow }) => {
+      const win = getCurrentWebviewWindow()
+      win.setAlwaysOnTop(true).catch(() => {})
+      try {
+        unlistenFocus = await win.onFocusChanged(({ payload: focused }) => {
+          console.info('[FloatView] 原生 OS 窗口焦点变动 focused =', focused)
+          if (!focused) {
+            onBlur()
+          }
+        })
+      } catch { /* ignore */ }
     })
     try {
       if (!collapsed.value) {
         await setSize(PANEL_W, PANEL_H)
       }
     } catch { /* ignore */ }
-  }
-  window.addEventListener('blur', onBlur)
-  if (isTauri()) {
     try {
       const { listen } = await import('@tauri-apps/api/event')
       unlistenOpen = await listen('float:open-request', (ev) => {
         console.info('[FloatView] float:open-request received', ev.payload)
-        // 如果处于展开态且触发了双向热键开关，则自动收成小球
         if (!collapsed.value && (ev?.payload as any)?.toggle) {
           toggleCollapse()
         } else {
@@ -216,6 +224,7 @@ onMounted(async () => {
     setTimeout(autoFocusInput, 300)
   }
 })
+
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('mouseenter', autoFocusInput)
@@ -223,6 +232,7 @@ onUnmounted(() => {
   window.removeEventListener('blur', onBlur)
   resizeObserver?.disconnect()
   unlistenOpen?.()
+  unlistenFocus?.()
 })
 
 const PIN_KEY = 'mhxy-zdream:float-pinned'
@@ -576,11 +586,10 @@ html, body, #app {
 <style scoped>
 /* ─── 收起态悬浮球（参考 deepseek_html 样式）─── */
 .ball {
-  position: fixed;
-  left: 50%; top: 50%;
+  position: absolute;
+  inset: 0;
+  margin: auto;
   width: 48px; height: 48px;
-  margin-left: -24px;
-  margin-top: -24px;
   border-radius: 50%;
 
   /* 无外框、无背景、无阴影 */
