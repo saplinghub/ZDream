@@ -27,7 +27,26 @@ export function useVoiceInput() {
     }, ms)
   }
 
-  function startListening() {
+  async function requestMicPermission(): Promise<boolean> {
+    try {
+      if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        stream.getTracks().forEach((t) => t.stop())
+        return true
+      }
+      const legacy = (navigator as any).getUserMedia || (navigator as any).webkitGetUserMedia
+      if (legacy) {
+        await new Promise((resolve, reject) => legacy.call(navigator, { audio: true }, resolve, reject))
+        return true
+      }
+      return true
+    } catch (e: any) {
+      console.warn('[VoiceInput] 麦克风权限请求失败:', e)
+      return false
+    }
+  }
+
+  async function startListening() {
     if (typeof window === 'undefined') return
 
     const SpeechRecognition =
@@ -35,15 +54,28 @@ export function useVoiceInput() {
 
     if (!SpeechRecognition) {
       voiceState.value = 'error'
-      voiceError.value = '当前环境不支持麦克风语音识别'
+      voiceError.value = '当前 Webview 引擎不支持语音识别 (SpeechRecognition API 未开放)'
       appStore.toast('⚠️ 当前环境不支持语音识别')
       resetStateAfter(4000)
       return
     }
 
-    // 如果已经在录音中，再次触发时关掉（Toggle）
     if (voiceState.value === 'listening' || voiceState.value === 'recognizing') {
       stopListening()
+      return
+    }
+
+    voiceState.value = 'listening'
+    voiceText.value = ''
+    voiceError.value = ''
+
+    // 提前唤起麦克风授权弹窗
+    const micGranted = await requestMicPermission()
+    if (!micGranted) {
+      voiceState.value = 'error'
+      voiceError.value = '麦克风权限被拒绝（请在系统隐私设置中允许梦金囊访问麦克风）'
+      appStore.toast('⚠️ 麦克风权限被拒绝，请在系统设置中开启')
+      resetStateAfter(4000)
       return
     }
 
@@ -58,9 +90,6 @@ export function useVoiceInput() {
       recognition.continuous = false
       recognition.interimResults = false
 
-      voiceState.value = 'listening'
-      voiceText.value = ''
-      voiceError.value = ''
       appStore.toast('🎙️ [麦克风收音中] 请说话，例如“大唐境外 351 103”...')
 
       recognition.onresult = (event: any) => {
@@ -76,12 +105,10 @@ export function useVoiceInput() {
           return
         }
 
-        // 汉字转阿拉伯数字规范化
         const cleanText = normalizeChineseNumbers(rawResult)
         voiceText.value = cleanText
         console.info('[VoiceInput] 规范化成数字:', cleanText)
 
-        // 尝试抓鬼模式坐标解析
         const parsedGhost = ghostStore.parseAndSet(cleanText)
         if (parsedGhost) {
           activityStore.switchTo('ghost')
@@ -95,17 +122,32 @@ export function useVoiceInput() {
       }
 
       recognition.onerror = (err: any) => {
-        console.warn('[VoiceInput] 识别报错:', err)
+        const errCode = err?.error || ''
+        console.warn('[VoiceInput] 识别报错:', errCode, err)
         voiceState.value = 'error'
-        voiceError.value = err?.error === 'not-allowed' ? '麦克风权限被拒绝' : '语音识别超时，请重试'
-        appStore.toast(`⚠️ 语音识别中断: ${voiceError.value}`)
-        resetStateAfter(3500)
+
+        if (errCode === 'not-allowed') {
+          voiceError.value = '麦克风权限被拒绝，请在系统设置中勾选允许梦金囊'
+        } else if (errCode === 'audio-capture') {
+          voiceError.value = '未检测到可用麦克风设备或设备正被其他软件独占'
+        } else if (errCode === 'network') {
+          voiceError.value = '语音云端识别网络超时，请检查网络连接后重试'
+        } else if (errCode === 'no-speech') {
+          voiceError.value = '未听到说话内容，请大声口述坐标'
+        } else if (errCode === 'aborted') {
+          voiceError.value = '语音识别被打断'
+        } else {
+          voiceError.value = `语音识别错误 (${errCode || '超时'})`
+        }
+
+        appStore.toast(`⚠️ 语音识别提示: ${voiceError.value}`)
+        resetStateAfter(4000)
       }
 
       recognition.onend = () => {
         if (voiceState.value === 'listening') {
           voiceState.value = 'error'
-          voiceError.value = '收音结束未产生结果'
+          voiceError.value = '收音结束未检测到说话'
           resetStateAfter(2500)
         }
       }
@@ -114,7 +156,7 @@ export function useVoiceInput() {
     } catch (e: any) {
       console.error('[VoiceInput] 启动报错:', e)
       voiceState.value = 'error'
-      voiceError.value = '无法启动麦克风设备'
+      voiceError.value = '无法启动麦克风语音引擎'
       resetStateAfter(3000)
     }
   }
