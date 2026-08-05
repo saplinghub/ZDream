@@ -138,7 +138,7 @@ export function useVoiceInput() {
 
         if (errCode === 'service-not-allowed') {
           voiceError.value = isMac
-            ? '❌ macOS 系统听写服务未开启！请进入【系统设置 ➔ 键盘 ➔ 听写 (Dictation)】打开“听写”开关。'
+            ? '❌ macOS 语音识别权限未允许！请进入【系统设置 ➔ 隐私与安全性 ➔ 语音识别】勾选允许“梦金囊”，并在【系统设置 ➔ 键盘 ➔ 听写】中开启“听写”。'
             : '❌ 系统语音服务未开启 (service-not-allowed)'
         } else if (errCode === 'not-allowed') {
           voiceError.value = isMac
