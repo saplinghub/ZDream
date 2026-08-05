@@ -103,6 +103,8 @@ const micStatus = ref('')
 const micOk = ref(false)
 const micTesting = ref(false)
 
+const isMac = typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent)
+
 async function getAudioMediaStream(): Promise<MediaStream> {
   if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
     return await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -119,9 +121,9 @@ async function getAudioMediaStream(): Promise<MediaStream> {
   }
   const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
   if (SpeechRecognition) {
-    throw new Error('Webview 安全策略限制了读取底层 MediaDevices 设备列表，但 Webkit 原生语音引擎完全可正常调起！')
+    throw new Error('Webview 安全策略屏蔽了底层音频设备枚举，但原生 SpeechRecognition 引擎可直接唤起识别！')
   }
-  throw new Error('当前环境未开启 MediaDevices 麦克风控制接口')
+  throw new Error('当前 Webview 宿主未开启 MediaDevices 麦克风接口')
 }
 
 async function testMicPermission() {
@@ -130,14 +132,17 @@ async function testMicPermission() {
   try {
     const stream = await getAudioMediaStream()
     micOk.value = true
-    micStatus.value = '✅ 麦克风权限响应正常！音频流调起成功，语音输入完全就绪。'
+    micStatus.value = '✅ 麦克风硬件权限正常！音频采集通道正常调起，按 Ctrl+2 随时语音识别。'
     stream.getTracks().forEach((track) => track.stop())
   } catch (e: any) {
     micOk.value = false
+    const sysGuide = isMac
+      ? 'macOS【系统设置 ➔ 隐私与安全性 ➔ 麦克风】'
+      : 'Windows【设置 ➔ 隐私和安全性 ➔ 麦克风】'
     if (e?.name === 'NotAllowedError' || e?.name === 'PermissionDeniedError') {
-      micStatus.value = '❌ 麦克风权限被操作系统拒绝！请进入 Windows 设置 ➔ 隐私和安全性 ➔ 麦克风 中允许桌面应用访问。'
+      micStatus.value = `❌ 麦克风权限被操作系统拒绝！请在 ${sysGuide} 中允许“梦金囊”访问。`
     } else {
-      micStatus.value = `ℹ️ 提示: ${e?.message || '按 Ctrl+2 可直接试用语音引擎'}`
+      micStatus.value = `ℹ️ 提示: ${e?.message || '按 Ctrl+2 可直接试用语音识别'} (${isMac ? 'macOS WKWebView' : 'Windows Webview2'})`
     }
   } finally {
     micTesting.value = false
@@ -244,7 +249,7 @@ const activeTab = ref<'shortcut' | 'appearance' | 'ai' | 'advanced'>('shortcut')
             {{ micStatus }}
           </div>
           <div class="meta" style="font-size: 11px; margin-top: 4px">
-            如提示“麦克风权限被拒绝”，请在 <b>Windows 设置 ➔ 隐私和安全性 ➔ 麦克风</b> 中确保开启“允许应用访问麦克风”。
+            如提示“麦克风权限被拒绝”，请在 <b>{{ isMac ? 'macOS 系统设置 ➔ 隐私与安全性 ➔ 麦克风' : 'Windows 设置 ➔ 隐私和安全性 ➔ 麦克风' }}</b> 中确保开启允许“梦金囊”访问。
           </div>
         </div>
 
