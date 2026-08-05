@@ -250,15 +250,31 @@ function togglePin() {
 
 let lastExpandTime = 0
 let lastToggleTime = 0
+let blurFallbackTimer: ReturnType<typeof setTimeout> | null = null
 
-async function onBlur() {
+async function doCollapse() {
   if (collapsed.value || isPinned.value) return
-  // 1.5 秒热键展开保护：如果刚通过热键/点击展开未满 1.5 秒，强行保留展开，防止失焦误关
-  if (Date.now() - lastExpandTime < 1500) return
-
   collapsed.value = true
   await setSize(52, 52)
   saveBallPos()
+}
+
+async function onBlur() {
+  if (collapsed.value || isPinned.value) return
+
+  const elapsed = Date.now() - lastExpandTime
+  if (elapsed < 450) {
+    // 如果开窗未满 450ms，排期 500ms 后再次校验，100% 确保点击外部失焦自动收起
+    if (blurFallbackTimer) clearTimeout(blurFallbackTimer)
+    blurFallbackTimer = setTimeout(() => {
+      if (!document.hasFocus() && !collapsed.value && !isPinned.value) {
+        doCollapse()
+      }
+    }, 500 - elapsed)
+    return
+  }
+
+  await doCollapse()
 }
 
 async function setSize(w: number, h: number) {
@@ -268,8 +284,6 @@ async function setSize(w: number, h: number) {
     await getCurrentWebviewWindow().setSize(new LogicalSize(w, h))
   } catch { /* ignore */ }
 }
-
-
 
 // 面板宽高 (加大高度，彻底解决底部控件防截断)
 const PANEL_W = 360
@@ -291,16 +305,14 @@ async function toggleCollapse() {
     }, 100)
   } else {
     // ── 收起：保持左上角基准坐标 (X,Y) 完全零漂移，瞬间收缩为 52x52 ──
-    collapsed.value = true
-    await setSize(52, 52)
-    saveBallPos()
+    await doCollapse()
   }
 }
 
 </script>
 
 <template>
-  <Transition name="float" mode="out-in">
+  <Transition name="float">
     <!-- 收起态：纯透明悬浮球 -->
     <div
       v-if="collapsed"
@@ -380,20 +392,15 @@ html, body, #app {
 
 /* ─── 展开/收起过渡动画 ─── */
 
-/* 悬浮球：弹入弹出 */
 .float-enter-active {
-  transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: opacity 0.2s ease, transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .float-leave-active {
-  transition: all 0.2s cubic-bezier(0.4, 0, 1, 1);
+  display: none !important;
 }
 .float-enter-from {
   opacity: 0;
-  transform: scale(0.3);
-}
-.float-leave-to {
-  opacity: 0;
-  transform: scale(1.2);
+  transform: scale(0.6);
 }
 </style>
 
