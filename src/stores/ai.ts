@@ -14,6 +14,9 @@ export interface AiSettings {
   model: string
   enableReasoning: boolean // 思考模式开关 (Chain-of-thought)
   temperature: number
+  whisperBaseUrl?: string
+  whisperApiKey?: string
+  whisperModel?: string
 }
 
 export interface AiAnalysisResult {
@@ -39,6 +42,9 @@ const DEFAULT_SETTINGS: AiSettings = {
   model: 'deepseek-chat',
   enableReasoning: true,
   temperature: 0.1,
+  whisperBaseUrl: 'https://api.openai.com/v1',
+  whisperApiKey: '',
+  whisperModel: 'whisper-1',
 }
 
 export const PRESETS: Record<AiProvider, { name: string; baseUrl: string; model: string }> = {
@@ -319,23 +325,26 @@ ${contextInstruction}
 
   /** AI 语音转文字 (Whisper API) */
   async function transcribeAudio(audioBlob: Blob): Promise<string> {
-    if (!isActive.value) {
-      logger.warn('ai', 'AI 未配置或未启用，跳过云端 Whisper 语音识别')
+    const targetBaseUrl = (settings.value.whisperBaseUrl || settings.value.baseUrl).replace(/\/$/, '')
+    const targetApiKey = settings.value.whisperApiKey || settings.value.apiKey
+    const targetModel = settings.value.whisperModel || 'whisper-1'
+
+    if (!targetApiKey) {
+      logger.warn('ai', 'AI 与 Whisper 未配置 API Key，跳过云端 Whisper 语音识别')
       return ''
     }
 
     try {
-      logger.info('ai', `正在发送语音 Blob (${audioBlob.size} 字节) 到 AI Whisper 接口...`)
+      const url = `${targetBaseUrl}/audio/transcriptions`
+      logger.info('ai', `正在发送语音 Blob (${audioBlob.size} 字节) 到 AI Whisper 接口 [${url}] (模型: ${targetModel})...`)
+
       const formData = new FormData()
       formData.append('file', audioBlob, 'voice.webm')
-      formData.append('model', 'whisper-1')
-
-      const baseUrl = settings.value.baseUrl.replace(/\/$/, '')
-      const url = `${baseUrl}/audio/transcriptions`
+      formData.append('model', targetModel)
 
       const headers: Record<string, string> = {}
-      if (settings.value.apiKey) {
-        headers['Authorization'] = `Bearer ${settings.value.apiKey}`
+      if (targetApiKey) {
+        headers['Authorization'] = `Bearer ${targetApiKey}`
       }
 
       let res: Response
