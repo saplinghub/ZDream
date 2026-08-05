@@ -6,6 +6,7 @@ import { ref } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { useGhostStore, normalizeChineseNumbers } from '@/stores/ghost'
 import { useActivityStore } from '@/stores/activity'
+import { logger } from '@/utils/logger'
 
 export type VoiceState = 'idle' | 'listening' | 'recognizing' | 'success' | 'error'
 
@@ -123,11 +124,26 @@ export function useVoiceInput() {
 
       recognition.onerror = (err: any) => {
         const errCode = err?.error || ''
-        console.warn('[VoiceInput] 识别报错:', errCode, err)
+        const isMac = typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent)
+
+        console.error('[VoiceInput] 🎙️ 语音识别详细报错日志:', {
+          code: errCode,
+          message: err?.message,
+          type: err?.type,
+          event: err,
+        })
+        logger.error('voice', `SpeechRecognition onerror (${errCode})`, { message: err?.message, err })
+
         voiceState.value = 'error'
 
-        if (errCode === 'not-allowed') {
-          voiceError.value = '麦克风权限被拒绝，请在系统设置中勾选允许梦金囊'
+        if (errCode === 'service-not-allowed') {
+          voiceError.value = isMac
+            ? '❌ macOS 系统听写服务未开启！请进入【系统设置 ➔ 键盘 ➔ 听写 (Dictation)】打开“听写”开关。'
+            : '❌ 系统语音服务未开启 (service-not-allowed)'
+        } else if (errCode === 'not-allowed') {
+          voiceError.value = isMac
+            ? '❌ 麦克风权限被拒绝！请进入 macOS【系统设置 ➔ 隐私与安全性 ➔ 麦克风】允许梦金囊。'
+            : '❌ 麦克风权限被拒绝，请在系统设置中开启。'
         } else if (errCode === 'audio-capture') {
           voiceError.value = '未检测到可用麦克风设备或设备正被其他软件独占'
         } else if (errCode === 'network') {
@@ -140,8 +156,8 @@ export function useVoiceInput() {
           voiceError.value = `语音识别错误 (${errCode || '超时'})`
         }
 
-        appStore.toast(`⚠️ 语音识别提示: ${voiceError.value}`)
-        resetStateAfter(4000)
+        appStore.toast(`⚠️ 语音识别: ${voiceError.value}`)
+        resetStateAfter(5000)
       }
 
       recognition.onend = () => {
