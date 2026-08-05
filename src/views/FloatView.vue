@@ -248,17 +248,15 @@ function togglePin() {
   }
 }
 
+let lastExpandTime = 0
+let lastToggleTime = 0
+
 async function onBlur() {
   if (collapsed.value || isPinned.value) return
-  // 600ms 防误收起保护：如果刚通过快捷键或点击展开不到 600ms，忽略焦点的闪烁 blur
-  if (Date.now() - lastToggleTime < 600) return
-  const { x: lx, y: ly, scale } = await getWinLogicalPos()
-  const anchorX = lx + ANCHOR_X
-  const anchorY = ly + ANCHOR_Y
-  const newX = Math.max(0, anchorX - BALL_CX)
-  const newY = Math.max(0, anchorY - BALL_CY)
+  // 1.5 秒热键展开保护：如果刚通过热键/点击展开未满 1.5 秒，强行保留展开，防止失焦误关
+  if (Date.now() - lastExpandTime < 1500) return
+
   collapsed.value = true
-  await setWinLogicalPos(newX, newY, scale)
   await setSize(52, 52)
   saveBallPos()
 }
@@ -271,54 +269,20 @@ async function setSize(w: number, h: number) {
   } catch { /* ignore */ }
 }
 
-async function getWinLogicalPos(): Promise<{ x: number; y: number; scale: number }> {
-  try {
-    const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow')
-    const { currentMonitor } = await import('@tauri-apps/api/window')
-    const [physical, monitor] = await Promise.all([
-      getCurrentWebviewWindow().outerPosition(),
-      currentMonitor(),
-    ])
-    const scale = monitor?.scaleFactor ?? 1
-    return { x: physical.x / scale, y: physical.y / scale, scale }
-  } catch {
-    return { x: 0, y: 0, scale: 1 }
-  }
-}
 
-async function setWinLogicalPos(logicalX: number, logicalY: number, scale: number) {
-  try {
-    const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow')
-    await getCurrentWebviewWindow().setPosition({ x: Math.round(logicalX * scale), y: Math.round(logicalY * scale) } as any)
-  } catch { /* ignore */ }
-}
 
 // 面板宽高 (加大高度，彻底解决底部控件防截断)
 const PANEL_W = 360
 const PANEL_H = 650
-// 锚点：展开态面板的视觉中心
-const ANCHOR_X = Math.round(PANEL_W / 2)
-const ANCHOR_Y = Math.round(PANEL_H / 2)
-// 收起态小球中心偏移（相对于 48×48 窗口）
-const BALL_CX = 24
-const BALL_CY = 24
-
-let lastToggleTime = 0
 
 async function toggleCollapse() {
   const now = Date.now()
-  if (now - lastToggleTime < 100) return // 100ms 超短防抖，避免极速连击过频
+  if (now - lastToggleTime < 150) return // 150ms 超短防抖
   lastToggleTime = now
 
-  const { x: lx, y: ly, scale } = await getWinLogicalPos()
-
   if (collapsed.value) {
-    // ── 展开：锚点 = 小球中心（逻辑坐标），面板中心对齐球心 ──
-    const anchorX = lx + BALL_CX
-    const anchorY = ly + BALL_CY
-    const newX = Math.max(0, anchorX - ANCHOR_X)
-    const newY = Math.max(0, anchorY - ANCHOR_Y)
-    await setWinLogicalPos(newX, newY, scale)
+    // ── 展开：保持左上角基准坐标 (X,Y) 完全零漂移，物理拓展至 360x650 ──
+    lastExpandTime = now
     await setSize(PANEL_W, PANEL_H)
     collapsed.value = false
     setTimeout(() => {
@@ -326,13 +290,8 @@ async function toggleCollapse() {
       el?.focus()
     }, 100)
   } else {
-    // ── 收起：瞬间收缩 OS 物理窗口为 52×52，彻底释放下方游戏界面 ──
+    // ── 收起：保持左上角基准坐标 (X,Y) 完全零漂移，瞬间收缩为 52x52 ──
     collapsed.value = true
-    const anchorX = lx + ANCHOR_X
-    const anchorY = ly + ANCHOR_Y
-    const newX = Math.max(0, anchorX - BALL_CX)
-    const newY = Math.max(0, anchorY - BALL_CY)
-    await setWinLogicalPos(newX, newY, scale)
     await setSize(52, 52)
     saveBallPos()
   }
