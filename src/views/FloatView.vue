@@ -6,25 +6,16 @@ import { fmtTimeShort } from '@/utils/format'
 import { getActivity } from '@/activities/registry'
 import { showMainWindow } from '@/platform/windows'
 import { isTauri } from '@/platform/desktop'
-// 静态导入（避免拖拽热路径里的动态 import 延迟/失败）
-import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
-import { PhysicalPosition } from '@tauri-apps/api/dpi'
-import { cursorPosition } from '@tauri-apps/api/window'
 
 const store = useAppStore()
 const activityStore = useActivityStore()
 const collapsed = ref(false)
 
 // ── 点击 vs 拖动（绝对定位 + 物理坐标统一 + 静态导入）──
-let pxRatio = 1 // e.screenX → 物理像素 倍率（mousedown 校准）
-let dragOffsetX = 0
-let dragOffsetY = 0
-let winPos = { x: 0, y: 0 }
-let winPosInit = false
+let mouseDownPos = { x: 0, y: 0 }
 const isDragging = ref(false)
 const pressing = ref(false)
 const DRAG_THRESHOLD = 5
-let dragFrame = 0
 
 function onBallDown(e: MouseEvent) {
   if (e.button !== 0) return
@@ -34,60 +25,27 @@ function onBallDown(e: MouseEvent) {
   }
   pressing.value = true
   isDragging.value = false
-  winPosInit = false
-  // 立即注册事件（不等待校准），异步完成坐标校准
-  document.addEventListener('mousemove', onBallMove)
+  mouseDownPos = { x: e.clientX, y: e.clientY }
+
+  if (isTauri()) {
+    // 唤起 Windows / macOS 原生 C 层硬件加速窗口拖拽 (144Hz 极速丝滑不卡顿)
+    import('@tauri-apps/api/webviewWindow').then(({ getCurrentWebviewWindow }) => {
+      getCurrentWebviewWindow().startDragging().catch(() => {})
+    })
+  }
+
   document.addEventListener('mouseup', onBallUp)
-  if (!isTauri()) return
-  Promise.all([cursorPosition(), getCurrentWebviewWindow().outerPosition()])
-    .then(([cursor, pos]) => {
-      pxRatio = e.screenX !== 0 ? cursor.x / e.screenX : 1
-      winPos = { x: pos.x, y: pos.y }
-      dragOffsetX = cursor.x - winPos.x
-      dragOffsetY = cursor.y - winPos.y
-      winPosInit = true
-      console.info('[drag] calibrated | screenX =', e.screenX, '| cursor =', cursor.x, cursor.y, '| win =', pos.x, pos.y, '| pxRatio =', pxRatio)
-    })
-    .catch((err) => {
-      winPosInit = false
-      console.warn('[drag] 校准失败:', err)
-    })
 }
 
-function onBallMove(e: MouseEvent) {
-  if (!isTauri() || !winPosInit) return
-  // 鼠标位置统一转为物理像素
-  const mx = e.screenX * pxRatio
-  const my = e.screenY * pxRatio
-  // 阈值判定：物理坐标相对按下点位移
-  if (!isDragging.value) {
-    const movedX = mx - (dragOffsetX + winPos.x)
-    const movedY = my - (dragOffsetY + winPos.y)
-    if (Math.abs(movedX) + Math.abs(movedY) < DRAG_THRESHOLD) return
-    isDragging.value = true
-    pressing.value = false
-  }
-  // 绝对定位：窗口 = 鼠标物理位置 - 固定偏移（必须整数，Tauri set_position 要求 i32）
-  if (e.timeStamp - dragFrame > 8) { // 限频 ~120fps
-    dragFrame = e.timeStamp
-    const x = Math.round(mx - dragOffsetX)
-    const y = Math.round(my - dragOffsetY)
-    winPos = { x, y }
-    getCurrentWebviewWindow().setPosition(new PhysicalPosition(x, y)).catch((err) => {
-      console.warn('[drag] setPosition ERROR:', err)
-    })
-  }
-}
-
-function onBallUp(_e: MouseEvent) {
-  document.removeEventListener('mousemove', onBallMove)
+function onBallUp(e: MouseEvent) {
   document.removeEventListener('mouseup', onBallUp)
   pressing.value = false
-  if (!isDragging.value) {
-    console.info('[drag] click (no drag), toggle')
+  const dist = Math.abs(e.clientX - mouseDownPos.x) + Math.abs(e.clientY - mouseDownPos.y)
+  if (dist < DRAG_THRESHOLD) {
+    console.info('[drag] 点击触发 展开/收起')
     toggleCollapse()
   } else {
-    console.info('[drag] drag end, save pos')
+    console.info('[drag] 原生拖拽结束，保存位置')
     saveBallPos()
   }
   isDragging.value = false
@@ -155,7 +113,6 @@ function forceTransparent() {
 forceTransparent()
 
 async function expandAndFocus() {
-  if (transitioning.value) return
   if (collapsed.value) {
     await toggleCollapse()
   }
@@ -197,7 +154,7 @@ const panelEl = ref<HTMLElement | null>(null)
 let resizeObserver: ResizeObserver | null = null
 
 function syncDynamicWindowSize() {
-  if (collapsed.value || transitioning.value || resizing.value) return
+  if (collapsed.value) return
   if (!panelEl.value) return
 
   const contentH = panelEl.value.scrollHeight
@@ -230,13 +187,6 @@ onMounted(async () => {
         await setSize(PANEL_W, PANEL_H)
       }
     } catch { /* ignore */ }
-    import('@tauri-apps/api/webviewWindow').then(async ({ getCurrentWebviewWindow }) => {
-      try {
-        const pos = await getCurrentWebviewWindow().outerPosition()
-        winPos = { x: pos.x, y: pos.y }
-        winPosInit = true
-      } catch { /* ignore */ }
-    })
   }
   window.addEventListener('blur', onBlur)
   if (isTauri()) {
@@ -282,22 +232,16 @@ function togglePin() {
 }
 
 async function onBlur() {
-  if (collapsed.value || transitioning.value || isPinned.value) return
+  if (collapsed.value || isPinned.value) return
   const { x: lx, y: ly, scale } = await getWinLogicalPos()
   const anchorX = lx + ANCHOR_X
   const anchorY = ly + ANCHOR_Y
   const newX = Math.max(0, anchorX - BALL_CX)
   const newY = Math.max(0, anchorY - BALL_CY)
-  transitioning.value = true
-  resizing.value = true
   collapsed.value = true
-  await new Promise(r => setTimeout(r, 250))
   await setWinLogicalPos(newX, newY, scale)
-  await setSize(48, 48)
-  await new Promise(r => setTimeout(r, 100))
-  resizing.value = false
-  await new Promise(r => setTimeout(r, 350))
-  transitioning.value = false
+  await setSize(52, 52)
+  saveBallPos()
 }
 
 async function setSize(w: number, h: number) {
@@ -340,13 +284,14 @@ const ANCHOR_Y = Math.round(PANEL_H / 2)
 const BALL_CX = 24
 const BALL_CY = 24
 
-const transitioning = ref(false)
-const resizing = ref(false) // 窗口缩放中，隐藏球避免漂移
+let lastToggleTime = 0
 
 async function toggleCollapse() {
-  if (transitioning.value) return
+  const now = Date.now()
+  if (now - lastToggleTime < 100) return // 100ms 超短防抖，避免极速连击过频
+  lastToggleTime = now
+
   const { x: lx, y: ly, scale } = await getWinLogicalPos()
-  transitioning.value = true
 
   if (collapsed.value) {
     // ── 展开：锚点 = 小球中心（逻辑坐标），面板中心对齐球心 ──
@@ -354,30 +299,23 @@ async function toggleCollapse() {
     const anchorY = ly + BALL_CY
     const newX = Math.max(0, anchorX - ANCHOR_X)
     const newY = Math.max(0, anchorY - ANCHOR_Y)
-    resizing.value = true
     await setWinLogicalPos(newX, newY, scale)
     await setSize(PANEL_W, PANEL_H)
-    resizing.value = false
     collapsed.value = false
-    await new Promise(r => setTimeout(r, 400))
-    transitioning.value = false
-    const el = document.querySelector<HTMLInputElement>('.f-item-input')
-    el?.focus()
+    setTimeout(() => {
+      const el = document.querySelector<HTMLInputElement>('.f-item-input')
+      el?.focus()
+    }, 100)
   } else {
-    // ── 收起：锚点 = 面板中心（逻辑坐标），球心对齐面板中心 ──
-    resizing.value = true
+    // ── 收起：瞬间收缩 OS 物理窗口为 52×52，彻底释放下方游戏界面 ──
     collapsed.value = true
-    await new Promise(r => setTimeout(r, 250))
     const anchorX = lx + ANCHOR_X
     const anchorY = ly + ANCHOR_Y
     const newX = Math.max(0, anchorX - BALL_CX)
     const newY = Math.max(0, anchorY - BALL_CY)
     await setWinLogicalPos(newX, newY, scale)
-    await setSize(48, 48)
-    await new Promise(r => setTimeout(r, 100))
-    resizing.value = false
-    await new Promise(r => setTimeout(r, 350))
-    transitioning.value = false
+    await setSize(52, 52)
+    saveBallPos()
   }
 }
 
@@ -390,7 +328,7 @@ async function toggleCollapse() {
       v-if="collapsed"
       key="ball"
       class="ball"
-      :class="{ pressing: pressing, dragging: isDragging, resizing: resizing }"
+      :class="{ pressing: pressing, dragging: isDragging }"
       @mousedown="onBallDown"
     >
       <span class="ball-letter">{{ activityStore.ballText }}</span>
