@@ -292,136 +292,175 @@ export function useUpdateChecker() {
     }
   }
 
-  /** 平台 fetch 下载（支持 Chunk 流式实时进度 + AbortController 取消） */
+  /** 拼接多镜像候选队列 */
+  function buildCandidateUrls(assetUrl: string, proxy = ''): string[] {
+    const list: string[] = []
+    if (proxy) {
+      list.push(proxyUrl(assetUrl, proxy))
+    }
+    list.push(assetUrl)
+    // 自动添加热门备用加速镜像源
+    if (!proxy.includes('ghproxy.net')) {
+      list.push(`https://ghproxy.net/${assetUrl}`)
+    }
+    if (!proxy.includes('mirror.ghproxy.com')) {
+      list.push(`https://mirror.ghproxy.com/${assetUrl}`)
+    }
+    return Array.from(new Set(list))
+  }
+
+  /** 平台 fetch 下载（支持 智能多镜像降级 + 15s Stall 判死 + 实时进度 + 取消） */
   async function downloadUpdate(assetUrl: string, fileName: string, proxy = ''): Promise<string | null> {
     currentAbortController = new AbortController()
     const signal = currentAbortController.signal
+    const candidates = buildCandidateUrls(assetUrl, proxy)
 
     download.value = {
       downloading: true,
       progress: 0,
       fileName,
       savedPath: '',
-      statusText: '正在连接服务器...',
+      statusText: '正在探测最优镜像节点...',
       error: '',
     }
 
-    try {
-      const downloadUrl = proxyUrl(assetUrl, proxy)
-      logger.info('update', `下载开始 | ${fileName} | ${downloadUrl}`)
+    let lastError: Error | null = null
 
-      const res = await platformFetch(downloadUrl, { connectTimeout: 120000, signal })
-      logger.info('update', `下载响应 HTTP ${res.status}`)
-
-      if (!res.ok) {
-        const msg =
-          res.status === 404
-            ? '文件不存在（可能构建中）'
-            : res.status === 403
-            ? '访问被拒绝（GitHub API 限流）'
-            : `下载失败 HTTP ${res.status}`
-        throw new Error(msg)
-      }
-
-      const contentLength = Number(res.headers.get('content-length') || 0)
-      const totalMb = contentLength > 0 ? (contentLength / 1024 / 1024).toFixed(1) : ''
-
-      let merged: Uint8Array
-
-      if (res.body && typeof res.body.getReader === 'function') {
-        const reader = res.body.getReader()
-        let receivedLength = 0
-        const chunks: Uint8Array[] = []
-
-        while (true) {
-          if (signal.aborted) {
-            throw new DOMException('已取消下载', 'AbortError')
-          }
-          const { done, value } = await reader.read()
-          if (done) break
-          if (value) {
-            chunks.push(value)
-            receivedLength += value.length
-            const loadedMb = (receivedLength / 1024 / 1024).toFixed(1)
-            const percent = contentLength > 0
-              ? Math.min(99, Math.round((receivedLength / contentLength) * 100))
-              : Math.min(95, Math.round((receivedLength / (50 * 1024 * 1024)) * 100))
-
-            download.value = {
-              downloading: true,
-              progress: percent,
-              fileName,
-              savedPath: '',
-              statusText: totalMb ? `${loadedMb} MB / ${totalMb} MB (${percent}%)` : `${loadedMb} MB (${percent}%)`,
-              error: '',
-            }
-          }
-        }
-
-        merged = new Uint8Array(receivedLength)
-        let position = 0
-        for (const chunk of chunks) {
-          merged.set(chunk, position)
-          position += chunk.length
-        }
-      } else {
-        download.value.progress = 50
-        download.value.statusText = '正在接收数据包...'
-        const data = await res.arrayBuffer()
-        merged = new Uint8Array(data)
-      }
-
-      logger.info('update', `下载完成 | ${fileName} | ${merged.length} 字节`)
-      if (merged.length === 0) throw new Error('下载内容为空')
-
-      // Tauri -> 写 Downloads
-      try {
-        const { writeFile } = await import('@tauri-apps/plugin-fs')
-        const { join, downloadDir } = await import('@tauri-apps/api/path')
-        const path = await join(await downloadDir(), fileName)
-        logger.info('update', `写入文件 | ${path}`)
-        await writeFile(path, merged)
-        logger.info('update', `写入成功 | ${path}`)
-        download.value = {
-          downloading: false,
-          progress: 100,
-          fileName,
-          savedPath: path,
-          statusText: '下载完成',
-          error: '',
-        }
-        return path
-      } catch (writeErr) {
-        logger.error('update', `写入失败（降级浏览器下载）`, writeErr)
-        const blob = new Blob([merged], { type: 'application/octet-stream' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = fileName
-        a.click()
-        URL.revokeObjectURL(url)
-        download.value = {
-          downloading: false,
-          progress: 100,
-          fileName,
-          savedPath: '(浏览器下载)',
-          statusText: '下载完成（已在浏览器中保存）',
-          error: '',
-        }
-        return null
-      }
-    } catch (e) {
-      if (signal.aborted || (e instanceof DOMException && e.name === 'AbortError')) {
+    for (let i = 0; i < candidates.length; i++) {
+      if (signal.aborted) {
         download.value = { downloading: false, progress: 0, fileName: '', savedPath: '', statusText: '', error: '已取消下载' }
         return null
       }
-      const msg = e instanceof Error ? e.message : '下载失败：网络不可用'
-      logger.error('update', `下载失败: ${msg}`, e)
-      download.value = { downloading: false, progress: 0, fileName: '', savedPath: '', statusText: '', error: msg }
-      return null
-    } finally {
-      currentAbortController = null
+
+      const downloadUrl = candidates[i]
+      const nodeText = candidates.length > 1 ? ` (镜像节点 ${i + 1}/${candidates.length})` : ''
+      logger.info('update', `尝试下载 | ${fileName}${nodeText} | ${downloadUrl}`)
+      download.value.statusText = `正在连接镜像节点 ${i + 1}/${candidates.length}...`
+
+      try {
+        const res = await platformFetch(downloadUrl, { connectTimeout: 15000, signal })
+        logger.info('update', `镜像节点 ${i + 1} 响应 HTTP ${res.status}`)
+
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`)
+        }
+
+        const contentLength = Number(res.headers.get('content-length') || 0)
+        const totalMb = contentLength > 0 ? (contentLength / 1024 / 1024).toFixed(1) : ''
+
+        let merged: Uint8Array
+
+        if (res.body && typeof res.body.getReader === 'function') {
+          const reader = res.body.getReader()
+          let receivedLength = 0
+          const chunks: Uint8Array[] = []
+          let stallTimer: ReturnType<typeof setTimeout> | null = null
+
+          const resetStallTimer = () => {
+            if (stallTimer) clearTimeout(stallTimer)
+            stallTimer = setTimeout(() => {
+              logger.warn('update', `镜像节点 ${i + 1} 连续 15 秒无数据传输，判定 Stall 熔断！`)
+              currentAbortController?.abort()
+            }, 15000)
+          }
+
+          try {
+            resetStallTimer()
+            while (true) {
+              if (signal.aborted) throw new DOMException('已取消或传输超时', 'AbortError')
+              const { done, value } = await reader.read()
+              if (done) break
+              if (value) {
+                resetStallTimer()
+                chunks.push(value)
+                receivedLength += value.length
+                const loadedMb = (receivedLength / 1024 / 1024).toFixed(1)
+                const percent = contentLength > 0
+                  ? Math.min(99, Math.round((receivedLength / contentLength) * 100))
+                  : Math.min(95, Math.round((receivedLength / (50 * 1024 * 1024)) * 100))
+
+                download.value = {
+                  downloading: true,
+                  progress: percent,
+                  fileName,
+                  savedPath: '',
+                  statusText: totalMb
+                    ? `${loadedMb} MB / ${totalMb} MB (${percent}%)${nodeText}`
+                    : `${loadedMb} MB (${percent}%)${nodeText}`,
+                  error: '',
+                }
+              }
+            }
+          } finally {
+            if (stallTimer) clearTimeout(stallTimer)
+          }
+
+          merged = new Uint8Array(receivedLength)
+          let position = 0
+          for (const chunk of chunks) {
+            merged.set(chunk, position)
+            position += chunk.length
+          }
+        } else {
+          download.value.progress = 50
+          download.value.statusText = `正在接收数据包${nodeText}...`
+          const data = await res.arrayBuffer()
+          merged = new Uint8Array(data)
+        }
+
+        logger.info('update', `镜像节点 ${i + 1} 下载完成 | ${fileName} | ${merged.length} 字节`)
+        if (merged.length === 0) throw new Error('下载文件为空')
+
+        // 写入硬盘文件 Downloads
+        try {
+          const { writeFile } = await import('@tauri-apps/plugin-fs')
+          const { join, downloadDir } = await import('@tauri-apps/api/path')
+          const path = await join(await downloadDir(), fileName)
+          logger.info('update', `写入文件 | ${path}`)
+          await writeFile(path, merged)
+          logger.info('update', `写入成功 | ${path}`)
+          download.value = {
+            downloading: false,
+            progress: 100,
+            fileName,
+            savedPath: path,
+            statusText: '下载完成',
+            error: '',
+          }
+          return path
+        } catch (writeErr) {
+          logger.error('update', `写入磁盘失败（降级浏览器下载）`, writeErr)
+          const blob = new Blob([merged], { type: 'application/octet-stream' })
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = fileName
+          a.click()
+          URL.revokeObjectURL(url)
+          download.value = {
+            downloading: false,
+            progress: 100,
+            fileName,
+            savedPath: '(已由浏览器保存)',
+            statusText: '下载完成（已由浏览器保存）',
+            error: '',
+          }
+          return null
+        }
+      } catch (e) {
+        if (signal.aborted && !download.value.downloading) {
+          download.value = { downloading: false, progress: 0, fileName: '', savedPath: '', statusText: '', error: '已取消下载' }
+          return null
+        }
+        lastError = e instanceof Error ? e : new Error(String(e))
+        logger.warn('update', `镜像节点 ${i + 1} 连接失败/超时 (${lastError.message})，尝试下一节点...`)
+      }
     }
+
+    const msg = `所有 ${candidates.length} 个下载镜像均不可用 (${lastError?.message || '网络超时'})`
+    logger.error('update', msg)
+    download.value = { downloading: false, progress: 0, fileName: '', savedPath: '', statusText: '', error: msg }
+    return null
   }
 
   return { status, download, check, downloadUpdate, openFile, silentInstall, cancelDownload, parseVersion, compareVersion, GITHUB_RELEASES }
