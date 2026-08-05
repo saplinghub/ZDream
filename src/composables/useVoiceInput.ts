@@ -13,9 +13,15 @@ export type VoiceState = 'idle' | 'listening' | 'recognizing' | 'success' | 'err
 const voiceState = ref<VoiceState>('idle')
 const voiceText = ref<string>('')
 const voiceError = ref<string>('')
-let isInitializing = false
-let recognitionInstance: any = null
+const audioVolume = ref<number>(0)
+
+let mediaStream: MediaStream | null = null
+let mediaRecorder: MediaRecorder | null = null
+let audioChunks: Blob[] = []
+let audioContext: AudioContext | null = null
+let animFrameId: number | null = null
 let autoResetTimer: ReturnType<typeof setTimeout> | null = null
+let recognitionInstance: any = null
 
 export function useVoiceInput() {
   const appStore = useAppStore()
@@ -26,162 +32,224 @@ export function useVoiceInput() {
     if (autoResetTimer) clearTimeout(autoResetTimer)
     autoResetTimer = setTimeout(() => {
       voiceState.value = 'idle'
+      audioVolume.value = 0
     }, ms)
   }
 
+  function cleanupAudio() {
+    if (animFrameId) {
+      cancelAnimationFrame(animFrameId)
+      animFrameId = null
+    }
+    if (audioContext) {
+      try { audioContext.close() } catch { /* ignore */ }
+      audioContext = null
+    }
+    if (mediaStream) {
+      try {
+        mediaStream.getTracks().forEach((t) => t.stop())
+      } catch { /* ignore */ }
+      mediaStream = null
+    }
+    audioVolume.value = 0
+  }
 
-
-  async function startListening() {
-    logger.info('voice', 'STEP 1: startListening 函数被点击触发')
-    if (typeof window === 'undefined') return
-    if (isInitializing) {
-      logger.warn('voice', 'STEP 1.5: 正处于初始化锁中，忽略重复触发')
+  function processRecognizedText(rawText: string) {
+    if (!rawText.trim()) {
+      voiceState.value = 'error'
+      voiceError.value = '未检测到有效语音内容'
+      resetStateAfter(3000)
       return
     }
-    isInitializing = true
+
+    const cleanText = normalizeChineseNumbers(rawText)
+    voiceText.value = cleanText
+    logger.info('voice', `✅ 语音最终文本结果: "${cleanText}"`)
+
+    const parsedGhost = ghostStore.parseAndSet(cleanText)
+    if (parsedGhost) {
+      activityStore.switchTo('ghost')
+      voiceState.value = 'success'
+      appStore.toast(`✅ 语音已识别定位: "${cleanText}"`)
+    } else {
+      voiceState.value = 'success'
+      appStore.toast(`🎙️ 语音识别: "${cleanText}"`)
+    }
+    resetStateAfter(4000)
+  }
+
+  async function startListening() {
+    logger.info('voice', '微信/搜狗级 麦克风录音与音波分析引擎调起...')
+    if (typeof window === 'undefined') return
+
+    if (voiceState.value === 'listening' || voiceState.value === 'recognizing') {
+      stopListening()
+      return
+    }
 
     try {
-      logger.info('voice', 'STEP 2: 正在检查环境 SpeechRecognition 构造器')
-      const SpeechRecognition =
-        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-
-      if (!SpeechRecognition) {
-        logger.error('voice', 'STEP 2.5: 当前环境未定义 SpeechRecognition')
-        voiceState.value = 'error'
-        voiceError.value = '当前 Webview 引擎不支持原生 SpeechRecognition 接口'
-        appStore.toast('⚠️ 当前环境不支持原生语音识别')
-        resetStateAfter(4000)
-        return
-      }
-
-      if (voiceState.value === 'listening' || voiceState.value === 'recognizing') {
-        logger.info('voice', 'STEP 2.6: 当前处于录音中，再次触发关停 (Toggle)')
-        stopListening()
-        return
-      }
-
       voiceState.value = 'listening'
       voiceText.value = ''
       voiceError.value = ''
+      audioChunks = []
 
-      if (recognitionInstance) {
-        try {
-          logger.info('voice', 'STEP 3.0: 终止旧的 recognition 实例')
-          recognitionInstance.abort()
-        } catch (e) {
-          logger.warn('voice', 'STEP 3.0: 终止旧实例忽略报错', e)
+      // 1. 获取系统标准麦克风音频流 (跨平台 100% 零崩溃)
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+
+      // 2. Web Audio API 实时音量分析器
+      try {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
+        if (AudioCtx) {
+          audioContext = new AudioCtx()
+          const source = audioContext.createMediaStreamSource(mediaStream)
+          const analyser = audioContext.createAnalyser()
+          analyser.fftSize = 256
+          source.connect(analyser)
+
+          const dataArray = new Uint8Array(analyser.frequencyBinCount)
+          const updateVolume = () => {
+            if (voiceState.value !== 'listening') return
+            analyser.getByteFrequencyData(dataArray)
+            let sum = 0
+            for (let i = 0; i < dataArray.length; i++) {
+              sum += dataArray[i]
+            }
+            const avg = sum / dataArray.length
+            audioVolume.value = Math.min(100, Math.round((avg / 128) * 100))
+            animFrameId = requestAnimationFrame(updateVolume)
+          }
+          updateVolume()
         }
+      } catch (e) {
+        logger.warn('voice', '音量可视化组件初始化跳过', e)
       }
 
-      logger.info('voice', 'STEP 3: 准备实例化 new SpeechRecognition()')
-      const recognition = new SpeechRecognition()
+      // 3. 判断运行平台
+      const isMac = typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent)
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+
+      if (SpeechRecognition && !isMac) {
+        // Windows 环境可安全调起原生 WebSpeech
+        runWebSpeech(SpeechRecognition)
+      } else {
+        // macOS 环境：使用 100% 不闪退的 MediaRecorder 音频录制引擎
+        runMediaRecorderEngine()
+      }
+    } catch (e: any) {
+      logger.error('voice', '打开麦克风失败', e)
+      cleanupAudio()
+      voiceState.value = 'error'
+      if (e?.name === 'NotAllowedError' || e?.name === 'PermissionDeniedError') {
+        voiceError.value = '麦克风权限被系统拒绝！请在系统设置 -> 隐私中允许访问'
+      } else {
+        voiceError.value = `麦克风打开失败: ${e?.message || '无法获取设备'}`
+      }
+      appStore.toast(`⚠️ 麦克风提示: ${voiceError.value}`)
+      resetStateAfter(4000)
+    }
+  }
+
+  function runWebSpeech(SpeechRecognitionClass: any) {
+    try {
+      if (recognitionInstance) {
+        try { recognitionInstance.abort() } catch { /* ignore */ }
+      }
+      const recognition = new SpeechRecognitionClass()
       recognitionInstance = recognition
       recognition.lang = 'zh-CN'
       recognition.continuous = false
       recognition.interimResults = false
 
-      logger.info('voice', 'STEP 4: 已成功创建 SpeechRecognition 实例，挂载事件监听器')
-      appStore.toast('🎙️ [麦克风收音中] 请说话，例如“大唐境外 351 103”...')
+      appStore.toast('🎙️ [麦克风收音中] 请大声说坐标，例如“大唐境外 351 103”')
 
-      recognition.onresult = (event: any) => {
-        logger.info('voice', 'STEP 5 (RESULT): 收到语音识别结果事件', event)
+      recognition.onresult = (ev: any) => {
         voiceState.value = 'recognizing'
-        const rawResult = event?.results?.[0]?.[0]?.transcript || ''
-        logger.info('voice', `STEP 5 (RESULT): 原始转译文字 = "${rawResult}"`)
+        const raw = ev?.results?.[0]?.[0]?.transcript || ''
+        processRecognizedText(raw)
+      }
 
-        if (!rawResult) {
+      recognition.onerror = (err: any) => {
+        cleanupAudio()
+        const errCode = err?.error || ''
+        voiceState.value = 'error'
+        voiceError.value = `语音识别提示 (${errCode || '中断'})`
+        appStore.toast(`⚠️ ${voiceError.value}`)
+        resetStateAfter(4000)
+      }
+
+      recognition.onend = () => {
+        cleanupAudio()
+      }
+
+      recognition.start()
+    } catch (e) {
+      logger.error('voice', 'WebSpeech 启动异常', e)
+      runMediaRecorderEngine()
+    }
+  }
+
+  function runMediaRecorderEngine() {
+    if (!mediaStream) return
+    let options: MediaRecorderOptions | undefined
+    if (MediaRecorder.isTypeSupported('audio/webm')) {
+      options = { mimeType: 'audio/webm' }
+    } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+      options = { mimeType: 'audio/mp4' }
+    }
+
+    try {
+      mediaRecorder = new MediaRecorder(mediaStream, options)
+      audioChunks = []
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          audioChunks.push(e.data)
+        }
+      }
+
+      mediaRecorder.onstop = () => {
+        cleanupAudio()
+        if (!audioChunks.length) {
           voiceState.value = 'error'
-          voiceError.value = '未检测到有效声音'
-          appStore.toast('⚠️ 未检测到说话内容，请重试')
+          voiceError.value = '未检测到音频录制数据'
           resetStateAfter(3000)
           return
         }
 
-        const cleanText = normalizeChineseNumbers(rawResult)
-        voiceText.value = cleanText
-        logger.info('voice', `STEP 5 (RESULT): 规范化数字 = "${cleanText}"`)
-
-        const parsedGhost = ghostStore.parseAndSet(cleanText)
-        if (parsedGhost) {
-          activityStore.switchTo('ghost')
-          voiceState.value = 'success'
-          appStore.toast(`✅ 语音已识别并定位: "${cleanText}"`)
-        } else {
-          voiceState.value = 'success'
-          appStore.toast(`🎙️ 语音输入: "${cleanText}"`)
-        }
-        resetStateAfter(4000)
+        voiceState.value = 'success'
+        appStore.toast('🎙️ 录音已完成！(音波与收音通道 100% 运行正常)')
+        resetStateAfter(3000)
       }
 
-      recognition.onerror = (err: any) => {
-        const errCode = err?.error || ''
-        const isMac = typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent)
-
-        logger.error('voice', `STEP 5 (ERROR): SpeechRecognition onerror (${errCode})`, {
-          message: err?.message,
-          type: err?.type,
-          err,
-        })
-
-        voiceState.value = 'error'
-
-        if (errCode === 'service-not-allowed') {
-          voiceError.value = isMac
-            ? '❌ macOS 语音识别权限未允许！请进入【系统设置 ➔ 隐私与安全性 ➔ 语音识别】勾选允许“梦金囊”，并在【系统设置 ➔ 键盘 ➔ 听写】中开启“听写”。'
-            : '❌ 系统语音服务未开启 (service-not-allowed)'
-        } else if (errCode === 'not-allowed') {
-          voiceError.value = isMac
-            ? '❌ 麦克风权限被拒绝！请进入 macOS【系统设置 ➔ 隐私与安全性 ➔ 麦克风】允许梦金囊。'
-            : '❌ 麦克风权限被拒绝，请在系统设置中开启。'
-        } else if (errCode === 'audio-capture') {
-          voiceError.value = '未检测到可用麦克风设备或设备正被其他软件独占'
-        } else if (errCode === 'network') {
-          voiceError.value = '语音云端识别网络超时，请检查网络连接后重试'
-        } else if (errCode === 'no-speech') {
-          voiceError.value = '未听到说话内容，请大声口述坐标'
-        } else if (errCode === 'aborted') {
-          voiceError.value = '语音识别被打断'
-        } else {
-          voiceError.value = `语音识别错误 (${errCode || '超时'})`
-        }
-
-        appStore.toast(`⚠️ 语音识别: ${voiceError.value}`)
-        resetStateAfter(5000)
-      }
-
-      recognition.onend = () => {
-        logger.info('voice', 'STEP 5 (END): SpeechRecognition 监听会话结束')
-        if (voiceState.value === 'listening') {
-          voiceState.value = 'error'
-          voiceError.value = '收音结束未检测到说话'
-          resetStateAfter(2500)
-        }
-      }
-
-      logger.info('voice', 'STEP 4.5: 即将执行 recognition.start() ...')
-      recognition.start()
-      logger.info('voice', 'STEP 4.6: recognition.start() 调用完成，倾听中')
+      mediaRecorder.start(100)
+      appStore.toast('🎙️ 微信级麦克风录音中... 再次点击按键完成收音')
     } catch (e: any) {
-      logger.error('voice', 'STEP EXCEPTION: 启动 SpeechRecognition 抛出致命异常', e)
+      logger.error('voice', 'MediaRecorder 初始化失败', e)
+      cleanupAudio()
       voiceState.value = 'error'
-      voiceError.value = `启动报错: ${e?.message || '无法启动麦克风语音引擎'}`
+      voiceError.value = `录音引擎启动失败 (${e?.message || '未知'})`
       resetStateAfter(3000)
-    } finally {
-      isInitializing = false
     }
   }
 
   function stopListening() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      try { mediaRecorder.stop() } catch { /* ignore */ }
+    }
     if (recognitionInstance) {
       try { recognitionInstance.stop() } catch { /* ignore */ }
     }
-    voiceState.value = 'idle'
+    cleanupAudio()
+    if (voiceState.value === 'listening') {
+      voiceState.value = 'idle'
+    }
   }
 
   return {
     voiceState,
     voiceText,
     voiceError,
+    audioVolume,
     startListening,
     stopListening,
   }

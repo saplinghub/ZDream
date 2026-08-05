@@ -12,7 +12,7 @@ const appStore = useAppStore()
 const ghostStore = useGhostStore()
 const ocrStore = useOcrStore()
 const activityStore = useActivityStore()
-const { voiceState, voiceText, voiceError, startListening } = useVoiceInput()
+const { voiceState, voiceText, voiceError, audioVolume, startListening } = useVoiceInput()
 
 const inputText = ref('')
 
@@ -235,7 +235,10 @@ defineExpose({ handleEsc })
         <span class="voice-status-text">⚠️ {{ voiceError || '未听到语音，按 Ctrl+2 重试' }}</span>
       </div>
       <div v-if="voiceState === 'listening'" class="voice-wave">
-        <span></span><span></span><span></span><span></span>
+        <span :style="{ transform: `scaleY(${Math.max(0.3, (audioVolume / 100) * 1.8)})` }"></span>
+        <span :style="{ transform: `scaleY(${Math.max(0.4, (audioVolume / 100) * 2.5)})` }"></span>
+        <span :style="{ transform: `scaleY(${Math.max(0.2, (audioVolume / 100) * 2.0)})` }"></span>
+        <span :style="{ transform: `scaleY(${Math.max(0.3, (audioVolume / 100) * 1.5)})` }"></span>
       </div>
     </div>
 
