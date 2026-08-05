@@ -13,6 +13,7 @@ export type VoiceState = 'idle' | 'listening' | 'recognizing' | 'success' | 'err
 const voiceState = ref<VoiceState>('idle')
 const voiceText = ref<string>('')
 const voiceError = ref<string>('')
+let isInitializing = false
 let recognitionInstance: any = null
 let autoResetTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -49,38 +50,40 @@ export function useVoiceInput() {
 
   async function startListening() {
     if (typeof window === 'undefined') return
-
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-
-    if (!SpeechRecognition) {
-      voiceState.value = 'error'
-      voiceError.value = '当前 Webview 引擎不支持语音识别 (SpeechRecognition API 未开放)'
-      appStore.toast('⚠️ 当前环境不支持语音识别')
-      resetStateAfter(4000)
-      return
-    }
-
-    if (voiceState.value === 'listening' || voiceState.value === 'recognizing') {
-      stopListening()
-      return
-    }
-
-    voiceState.value = 'listening'
-    voiceText.value = ''
-    voiceError.value = ''
-
-    // 提前唤起麦克风授权弹窗
-    const micGranted = await requestMicPermission()
-    if (!micGranted) {
-      voiceState.value = 'error'
-      voiceError.value = '麦克风权限被拒绝（请在系统隐私设置中允许梦金囊访问麦克风）'
-      appStore.toast('⚠️ 麦克风权限被拒绝，请在系统设置中开启')
-      resetStateAfter(4000)
-      return
-    }
+    if (isInitializing) return
+    isInitializing = true
 
     try {
+      const SpeechRecognition =
+        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+
+      if (!SpeechRecognition) {
+        voiceState.value = 'error'
+        voiceError.value = '当前 Webview 引擎不支持语音识别 (SpeechRecognition API 未开放)'
+        appStore.toast('⚠️ 当前环境不支持语音识别')
+        resetStateAfter(4000)
+        return
+      }
+
+      if (voiceState.value === 'listening' || voiceState.value === 'recognizing') {
+        stopListening()
+        return
+      }
+
+      voiceState.value = 'listening'
+      voiceText.value = ''
+      voiceError.value = ''
+
+      // 提前唤起麦克风授权弹窗
+      const micGranted = await requestMicPermission()
+      if (!micGranted) {
+        voiceState.value = 'error'
+        voiceError.value = '麦克风权限被拒绝（请在系统隐私设置中允许梦金囊访问麦克风）'
+        appStore.toast('⚠️ 麦克风权限被拒绝，请在系统设置中开启')
+        resetStateAfter(4000)
+        return
+      }
+
       if (recognitionInstance) {
         try { recognitionInstance.abort() } catch { /* ignore */ }
       }
@@ -174,6 +177,8 @@ export function useVoiceInput() {
       voiceState.value = 'error'
       voiceError.value = '无法启动麦克风语音引擎'
       resetStateAfter(3000)
+    } finally {
+      isInitializing = false
     }
   }
 

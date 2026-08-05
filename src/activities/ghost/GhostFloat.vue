@@ -41,9 +41,6 @@ onMounted(() => {
           }
         }
       })
-      listen('voice:start', () => {
-        startListening()
-      })
     })
   }
 })

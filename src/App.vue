@@ -141,17 +141,6 @@ onMounted(() => {
       logger.info('hotkey', 'OCR 截图快捷键触发')
       runOcrCapture()
     })
-    // 语音输入快捷键 (如 Ctrl+2)
-    registerGlobalShortcut(store.settings.voiceHotkey || 'Ctrl+2', async () => {
-      logger.info('hotkey', '语音快捷键触发')
-      if (isTauri()) {
-        const { openFloat } = await import('@/platform/windows')
-        await openFloat()
-        const { emitTo } = await import('@tauri-apps/api/event')
-        await emitTo('float', 'float:open-request', { toggle: false })
-        await emitTo('float', 'voice:start', {})
-      }
-    })
     removeDoubleShift = installDoubleShift(() => {
       if (isTauri()) {
         import('@/composables/useGlobalHotkey').then((m) => m.triggerFloatOpen())
@@ -164,8 +153,8 @@ onMounted(() => {
       setTimeout(() => openFloat(), 600)
     }
 
-    // 监听语音快捷键动态变化
-    watch(() => store.settings.voiceHotkey, (newKey, oldKey) => {
+    // 动态注册/监听语音快捷键
+    watch(() => store.settings.voiceHotkey || 'Ctrl+2', (newKey, oldKey) => {
       if (oldKey) unregisterGlobalShortcut(oldKey)
       if (newKey) {
         registerGlobalShortcut(newKey, async () => {
@@ -179,7 +168,7 @@ onMounted(() => {
           }
         })
       }
-    })
+    }, { immediate: true })
   }
 })
 
