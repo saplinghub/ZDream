@@ -34,6 +34,7 @@ export const STORAGE_KEYS = {
   settings: 'settings',
   events: 'events',
   bootstrapped: 'bootstrapped',
+  ai_settings: 'zdream:ai_settings_v2',
 } as const
 
 export function allPrefixedStorageKeys(): string[] {

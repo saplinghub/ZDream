@@ -122,17 +122,14 @@ export function platformGetItemSync<T = unknown>(key: string): T | null {
       return null
     }
   }
-  if (!isTauri()) {
-    try {
-      const raw = localStorage.getItem(key)
-      if (raw == null) return null
-      mem.set(key, raw)
-      return JSON.parse(raw) as T
-    } catch {
-      return null
-    }
+  try {
+    const raw = localStorage.getItem(key)
+    if (raw == null) return null
+    mem.set(key, raw)
+    return JSON.parse(raw) as T
+  } catch {
+    return null
   }
-  return null
 }
 
 export function platformSetItemSync(key: string, value: unknown) {

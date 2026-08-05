@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { THEMES } from '@/theme/themes'
 import { openTextFile } from '@/platform/desktop'
@@ -31,17 +31,10 @@ function runOcr() {
   runOcrCapture()
 }
 
-const newAcct = reactive({ name: '', server: '', note: '' })
-const fee = reactive({
-  feeRate: store.settings.feeRate,
-  settleDays: store.settings.settleDays,
-  monthlyBudget: store.settings.monthlyBudget,
-})
 const customHex = ref(store.settings.customHex)
 const themeKeys = Object.keys(THEMES)
 const fileInput = ref<HTMLInputElement | null>(null)
 const showUpdateModal = ref(false)
-const newTpl = reactive({ name: '', accountId: '', item: '', io: 'in' as 'in' | 'out', sub: '日常', qty: '', price: '' })
 
 const updater = useUpdateChecker()
 
@@ -57,7 +50,6 @@ async function doDownload(assetUrl: string, fileName: string) {
 }
 
 onMounted(() => {
-  // 启动后 5 秒自动检查一次
   setTimeout(() => {
     if (!updater.status.value.info) {
       updater.check(store.settings.githubProxy)
@@ -65,16 +57,10 @@ onMounted(() => {
   }, 5000)
 })
 
-function addAcct() {
-  store.addAccount({ ...newAcct })
-  newAcct.name = ''
-  newAcct.server = ''
-  newAcct.note = ''
-}
-
-function saveFee() {
-  store.saveFeeSettings({ ...fee })
-}
+const voiceHotkeyModel = computed({
+  get: () => store.settings.voiceHotkey || 'Ctrl+2',
+  set: (val: string) => { store.settings.voiceHotkey = val },
+})
 
 function applyCustom() {
   store.setTheme('custom', customHex.value)
@@ -105,7 +91,39 @@ async function onImportNative() {
   }
   await importFromText(text)
 }
-const activeTab = ref<'account' | 'shortcut' | 'appearance' | 'ai' | 'advanced'>('account')
+const voiceConflict = computed(() => {
+  const v = store.settings.voiceHotkey
+  if (v && (v === store.settings.hotkey || v === store.settings.ocrHotkey)) {
+    return '与【悬浮窗】或【截图识别】快捷键冲突！'
+  }
+  return ''
+})
+
+const micStatus = ref('')
+const micOk = ref(false)
+const micTesting = ref(false)
+
+async function testMicPermission() {
+  micTesting.value = true
+  micStatus.value = ''
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    micOk.value = true
+    micStatus.value = '✅ 麦克风权限响应正常！音频流调起成功，语音输入功能完全就绪。'
+    stream.getTracks().forEach((track) => track.stop())
+  } catch (e: any) {
+    micOk.value = false
+    if (e?.name === 'NotAllowedError' || e?.name === 'PermissionDeniedError') {
+      micStatus.value = '❌ 麦克风权限被操作系统拒绝！请在 Windows 设置 ➔ 隐私和安全性 ➔ 麦克风 中允许桌面应用访问。'
+    } else {
+      micStatus.value = `⚠️ 麦克风测试未成功: ${e?.message || '无法获取默认音频输入设备'}`
+    }
+  } finally {
+    micTesting.value = false
+  }
+}
+
+const activeTab = ref<'shortcut' | 'appearance' | 'ai' | 'advanced'>('shortcut')
 </script>
 
 <template>
@@ -113,20 +131,12 @@ const activeTab = ref<'account' | 'shortcut' | 'appearance' | 'ai' | 'advanced'>
     <div class="screen-head">
       <div>
         <p class="eyebrow">SETTINGS</p>
-        <h1>设置</h1>
-        <p class="sub">账号 · 外观配色 · 物品字典 · 费率 · 数据</p>
+        <h1>系统设置</h1>
+        <p class="sub">全局快捷键 · 麦克风权限 · 外观主题 · AI 大模型与 OCR 镜像</p>
       </div>
     </div>
 
     <div class="settings-tabs">
-      <button
-        type="button"
-        class="tab-btn"
-        :class="{ active: activeTab === 'account' }"
-        @click="activeTab = 'account'"
-      >
-        👤 账号与字典
-      </button>
       <button
         type="button"
         class="tab-btn"
@@ -141,7 +151,7 @@ const activeTab = ref<'account' | 'shortcut' | 'appearance' | 'ai' | 'advanced'>
         :class="{ active: activeTab === 'appearance' }"
         @click="activeTab = 'appearance'"
       >
-        🎨 外观与费率
+        🎨 外观与个性化
       </button>
       <button
         type="button"
@@ -157,139 +167,14 @@ const activeTab = ref<'account' | 'shortcut' | 'appearance' | 'ai' | 'advanced'>
         :class="{ active: activeTab === 'advanced' }"
         @click="activeTab = 'advanced'"
       >
-        🚀 版本与项目信息
+        🚀 版本与升级
       </button>
     </div>
 
-    <!-- 1. 账号与模板 -->
-    <div v-if="activeTab === 'account'" class="grid-2">
-      <div class="card settings-block">
-        <div class="row-between">
-          <h3>账号管理</h3>
-        </div>
-        <div class="stack" style="margin-top: 10px; gap: 8px">
-          <div class="grid-2">
-            <div class="field">
-              <label>名称</label>
-              <input v-model="newAcct.name" class="input" placeholder="必填" />
-            </div>
-            <div class="field">
-              <label>服务器</label>
-              <input v-model="newAcct.server" class="input" placeholder="选填" />
-            </div>
-          </div>
-          <div class="field">
-            <label>备注</label>
-            <input v-model="newAcct.note" class="input" placeholder="选填" />
-          </div>
-          <button class="btn btn-secondary btn-sm" type="button" @click="addAcct">添加账号</button>
-        </div>
-        <div class="acct-list" style="margin-top: 10px">
-          <div v-for="a in store.accounts" :key="a.id" class="acct-row">
-            <div>
-              <b>{{ a.name }}</b>
-              <div class="meta-line">{{ a.server || '未填服务器' }}{{ a.note ? ` · ${a.note}` : '' }}</div>
-            </div>
-            <button class="btn btn-ghost btn-sm" type="button" @click="store.removeAccount(a.id)">删除</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- 2. 梦幻道具库专属入口提示 -->
-      <div class="card settings-block stack" style="grid-column: 1 / -1; padding: 14px; background: color-mix(in oklch, var(--accent) 8%, var(--surface))">
-        <div class="row-between">
-          <div>
-            <h3 style="margin: 0; font-size: 14px">📦 梦幻道具词典与价格库已升格为一级独立菜单</h3>
-            <p class="meta" style="margin: 4px 0 0; font-size: 12px">
-              现可在左侧导航栏点击 <b>【📦 道具库】</b>，体验海量预设道具管理、极速分类搜索与 CSV/JSON 批量导入/导出功能！
-            </p>
-          </div>
-          <router-link to="/items" class="btn btn-primary btn-sm">
-            前往【📦 道具库】菜单 ➔
-          </router-link>
-        </div>
-      </div>
-
-      <div class="card settings-block">
-        <div class="row-between"><h3>快捷模板</h3></div>
-        <p class="meta" style="margin: 0 0 8px">记账页一键填入的预设模板</p>
-        <div class="stack" style="gap: 8px">
-          <div class="field">
-            <label>模板名称</label>
-            <input v-model="newTpl.name" class="input" placeholder="如：日常副本收入" />
-          </div>
-          <div class="grid-2">
-            <div class="field">
-              <label>账号</label>
-              <select v-model="newTpl.accountId" class="select">
-                <option value="">选择账号</option>
-                <option v-for="a in store.accounts" :key="a.id" :value="a.id">{{ a.name }}</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>物品</label>
-              <input v-model="newTpl.item" class="input" placeholder="物品名称" list="tplItemDict" />
-            </div>
-          </div>
-          <div class="grid-2">
-            <div class="field">
-              <label>收支</label>
-              <div class="seg">
-                <button type="button" :class="{ active: newTpl.io === 'in' }" @click="newTpl.io = 'in'">收入</button>
-                <button type="button" :class="{ active: newTpl.io === 'out' }" @click="newTpl.io = 'out'">消耗</button>
-              </div>
-            </div>
-            <div class="field">
-              <label>子类型</label>
-              <select v-model="newTpl.sub" class="select">
-                <option>日常</option>
-                <option>副本</option>
-                <option>摆摊</option>
-                <option>打造</option>
-                <option>炼妖</option>
-                <option>其他</option>
-              </select>
-            </div>
-          </div>
-          <div class="grid-2">
-            <div class="field">
-              <label>数量（默认）</label>
-              <input v-model="newTpl.qty" class="input num" placeholder="如 1" />
-            </div>
-            <div class="field">
-              <label>单价（默认）</label>
-              <input v-model="newTpl.price" class="input num" placeholder="如 120000" />
-            </div>
-          </div>
-          <button class="btn btn-secondary btn-sm" type="button" @click="store.addTemplate({ ...newTpl }); newTpl.name = ''; newTpl.item = ''">
-            添加模板
-          </button>
-        </div>
-        <div class="item-list" style="margin-top: 12px">
-          <div v-if="!store.templates.length" class="meta" style="padding: 8px; text-align: center">暂无自定义模板</div>
-          <div v-for="t in store.templates" :key="t.id" class="item-row">
-            <div>
-              <b>{{ t.name }}</b>
-              <div class="meta-line">
-                {{ t.io === 'in' ? '收入' : '消耗' }}·{{ t.sub }}
-                &ensp;{{ t.item }}
-                <span v-if="t.qty"> ×{{ t.qty }}</span>
-                <span v-if="t.price"> @{{ t.price }}</span>
-              </div>
-            </div>
-            <button class="btn btn-ghost btn-sm" type="button" @click="store.removeTemplate(t.id)">删除</button>
-          </div>
-        </div>
-        <datalist id="tplItemDict">
-          <option v-for="it in store.items" :key="it.name" :value="it.name" />
-        </datalist>
-      </div>
-    </div>
-
-    <!-- 2. 应用与快捷键 -->
+    <!-- 1. 应用与快捷键 -->
     <div v-if="activeTab === 'shortcut'" class="stack" style="gap: 16px">
       <div class="card settings-block stack">
-        <h3>数据与快捷键</h3>
+        <h3>全域快捷键设置</h3>
         <div class="field">
           <HotkeyRecorder
             v-model="store.settings.hotkey"
@@ -298,7 +183,7 @@ const activeTab = ref<'account' | 'shortcut' | 'appearance' | 'ai' | 'advanced'>
             :conflict-msg="hotkeyConflict"
           />
           <div class="meta" style="font-size:11px;margin-top:4px">
-            点击录入框并按下快捷键组合（如 Ctrl+`）即可自动设置。另外，双击 Shift 键也可唤出（应用聚焦时）
+            点击录入框并按下快捷键组合（如 Ctrl+`）即可自动设置。另外，双击 Shift 键也可唤出（应用聚焦时）。
           </div>
         </div>
 
@@ -310,11 +195,39 @@ const activeTab = ref<'account' | 'shortcut' | 'appearance' | 'ai' | 'advanced'>
             :conflict-msg="ocrConflict"
           />
           <div class="meta" style="font-size:11px;margin-top:4px">
-            点击录入框并按下快捷键组合（如 Ctrl+A）即可自动设置。
+            点击录入框并按下快捷键组合（如 Ctrl+A）即可自动设置，瞬间唤起屏幕框选识别。
           </div>
         </div>
 
-        <div class="field" style="margin-bottom: 10px">
+        <div class="field">
+          <HotkeyRecorder
+            v-model="voiceHotkeyModel"
+            label="全局语音识别快捷键 (Voice Input)"
+            placeholder="点击按键录入 (默认 Ctrl+2)..."
+            :conflict-msg="voiceConflict"
+          />
+          <div class="meta" style="font-size:11px;margin-top:4px">
+            点击录入框并按下快捷键组合（如 Ctrl+2）即可自动设置，按下立刻唤起麦克风收音。
+          </div>
+        </div>
+
+        <!-- 🎙️ 麦克风设备与权限测试 -->
+        <div class="card settings-block stack" style="margin-top: 6px; padding: 12px; background: color-mix(in oklch, var(--accent) 6%, var(--surface))">
+          <div class="row-between">
+            <h4 style="margin: 0; font-size: 13px">🎙️ 麦克风硬件设备与权限测试</h4>
+            <button class="btn btn-secondary btn-xs" type="button" @click="testMicPermission">
+              {{ micTesting ? '检测中...' : '测试麦克风权限' }}
+            </button>
+          </div>
+          <div v-if="micStatus" class="meta" :style="{ color: micOk ? 'var(--accent)' : 'var(--danger)', fontWeight: '600', fontSize: '12px', marginTop: '4px' }">
+            {{ micStatus }}
+          </div>
+          <div class="meta" style="font-size: 11px; margin-top: 4px">
+            如提示“麦克风权限被拒绝”，请在 <b>Windows 设置 ➔ 隐私和安全性 ➔ 麦克风</b> 中确保开启“允许应用访问麦克风”。
+          </div>
+        </div>
+
+        <div class="field" style="margin-top: 10px; margin-bottom: 10px">
           <label>数据存储目录（空白则使用默认 AppData 目录）</label>
           <div class="row" style="gap: 8px">
             <input v-model="store.settings.dataDir" class="input" placeholder="D:\ZDream\data" style="flex:1" />
@@ -354,11 +267,11 @@ const activeTab = ref<'account' | 'shortcut' | 'appearance' | 'ai' | 'advanced'>
       </div>
     </div>
 
-    <!-- 3. 外观与费率 -->
-    <div v-if="activeTab === 'appearance'" class="grid-2">
+    <!-- 2. 外观与个性化 -->
+    <div v-if="activeTab === 'appearance'" class="stack" style="gap: 16px">
       <div class="card settings-block stack">
-        <h3>外观配色</h3>
-        <p class="meta" style="margin: 0 0 8px">预设一键切换 · 也可自定义主色，即时生效并记住</p>
+        <h3>外观配色主题</h3>
+        <p class="meta" style="margin: 0 0 8px">预设一键切换 · 也可自定义主色，即时生效并永久保存</p>
         <div class="theme-grid">
           <button
             v-for="key in themeKeys"
@@ -380,37 +293,15 @@ const activeTab = ref<'account' | 'shortcut' | 'appearance' | 'ai' | 'advanced'>
         <div class="custom-row">
           <label class="meta" for="customAccent">自定义主色</label>
           <input id="customAccent" v-model="customHex" type="color" />
-          <button class="btn btn-secondary btn-sm" type="button" @click="applyCustom">应用</button>
+          <button class="btn btn-secondary btn-sm" type="button" @click="applyCustom">应用主色</button>
         </div>
         <div class="meta">
           当前：{{
             store.settings.theme === 'custom'
               ? '自定义'
               : THEMES[store.settings.theme]?.name || store.settings.theme
-          }}
+          }} · （注：藏宝阁手续费与账期已迁移至【藏宝阁 ➔ ⚙️ 费率与账期】独立设置）
         </div>
-      </div>
-
-      <div class="card settings-block stack">
-        <h3>藏宝阁与预算</h3>
-        <div class="grid-2">
-          <div class="field">
-            <label>手续费费率 %</label>
-            <input v-model.number="fee.feeRate" class="input num" type="number" min="0" max="20" step="0.1" />
-          </div>
-          <div class="field">
-            <label>到账延迟（天）</label>
-            <input v-model.number="fee.settleDays" class="input num" type="number" min="0" max="14" />
-          </div>
-        </div>
-        <div class="field">
-          <label>月度 RMB 预算</label>
-          <input v-model.number="fee.monthlyBudget" class="input num" type="number" />
-        </div>
-        <div class="meta">
-          本月已用 ¥{{ Math.round(store.monthSpentRmb) }} / 预算 ¥{{ fee.monthlyBudget }} · 超限时看板高亮
-        </div>
-        <button class="btn btn-secondary btn-sm" type="button" @click="saveFee">保存配置</button>
       </div>
     </div>
 
@@ -421,7 +312,7 @@ const activeTab = ref<'account' | 'shortcut' | 'appearance' | 'ai' | 'advanced'>
         class="card"
         style="padding: 12px 16px; font-size: 13px; font-weight: 600; background: var(--bg); border-left: 4px solid var(--accent); display: flex; justify-content: space-between; align-items: center"
       >
-        <span>{{ ai.activeBadgeText }}</span>
+        <span>{{ ai.activeBadgeText }} · 🔒 配置已同步至 SQLite，重启永不丢失</span>
         <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px">
           <input
             type="checkbox"

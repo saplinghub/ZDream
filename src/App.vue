@@ -163,6 +163,23 @@ onMounted(() => {
     if (isTauri() && store.settings.autoOpenFloat) {
       setTimeout(() => openFloat(), 600)
     }
+
+    // 监听语音快捷键动态变化
+    watch(() => store.settings.voiceHotkey, (newKey, oldKey) => {
+      if (oldKey) unregisterGlobalShortcut(oldKey)
+      if (newKey) {
+        registerGlobalShortcut(newKey, async () => {
+          logger.info('hotkey', '语音快捷键触发')
+          if (isTauri()) {
+            const { openFloat } = await import('@/platform/windows')
+            await openFloat()
+            const { emitTo } = await import('@tauri-apps/api/event')
+            await emitTo('float', 'float:open-request', { toggle: false })
+            await emitTo('float', 'voice:start', {})
+          }
+        })
+      }
+    })
   }
 })
 
@@ -172,6 +189,7 @@ onUnmounted(() => {
   if (!isAuxChrome.value) {
     unregisterGlobalHotkey(store.settings.hotkey || 'Ctrl+`')
     unregisterGlobalShortcut(store.settings.ocrHotkey || 'Ctrl+A')
+    unregisterGlobalShortcut(store.settings.voiceHotkey || 'Ctrl+2')
   }
 })
 </script>
