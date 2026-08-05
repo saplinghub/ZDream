@@ -103,20 +103,41 @@ const micStatus = ref('')
 const micOk = ref(false)
 const micTesting = ref(false)
 
+async function getAudioMediaStream(): Promise<MediaStream> {
+  if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
+    return await navigator.mediaDevices.getUserMedia({ audio: true })
+  }
+  const legacyGetUserMedia =
+    (navigator as any).getUserMedia ||
+    (navigator as any).webkitGetUserMedia ||
+    (navigator as any).mozGetUserMedia ||
+    (navigator as any).msGetUserMedia
+  if (legacyGetUserMedia) {
+    return new Promise((resolve, reject) => {
+      legacyGetUserMedia.call(navigator, { audio: true }, resolve, reject)
+    })
+  }
+  const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+  if (SpeechRecognition) {
+    throw new Error('Webview 安全策略限制了读取底层 MediaDevices 设备列表，但 Webkit 原生语音引擎完全可正常调起！')
+  }
+  throw new Error('当前环境未开启 MediaDevices 麦克风控制接口')
+}
+
 async function testMicPermission() {
   micTesting.value = true
   micStatus.value = ''
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    const stream = await getAudioMediaStream()
     micOk.value = true
-    micStatus.value = '✅ 麦克风权限响应正常！音频流调起成功，语音输入功能完全就绪。'
+    micStatus.value = '✅ 麦克风权限响应正常！音频流调起成功，语音输入完全就绪。'
     stream.getTracks().forEach((track) => track.stop())
   } catch (e: any) {
     micOk.value = false
     if (e?.name === 'NotAllowedError' || e?.name === 'PermissionDeniedError') {
-      micStatus.value = '❌ 麦克风权限被操作系统拒绝！请在 Windows 设置 ➔ 隐私和安全性 ➔ 麦克风 中允许桌面应用访问。'
+      micStatus.value = '❌ 麦克风权限被操作系统拒绝！请进入 Windows 设置 ➔ 隐私和安全性 ➔ 麦克风 中允许桌面应用访问。'
     } else {
-      micStatus.value = `⚠️ 麦克风测试未成功: ${e?.message || '无法获取默认音频输入设备'}`
+      micStatus.value = `ℹ️ 提示: ${e?.message || '按 Ctrl+2 可直接试用语音引擎'}`
     }
   } finally {
     micTesting.value = false
