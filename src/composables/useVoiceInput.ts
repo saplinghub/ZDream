@@ -6,6 +6,7 @@ import { ref } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { useGhostStore, normalizeChineseNumbers } from '@/stores/ghost'
 import { useActivityStore } from '@/stores/activity'
+import { useAiStore } from '@/stores/ai'
 import { logger } from '@/utils/logger'
 
 export type VoiceState = 'idle' | 'listening' | 'recognizing' | 'success' | 'error'
@@ -207,22 +208,54 @@ export function useVoiceInput() {
         }
       }
 
-      mediaRecorder.onstop = () => {
+      mediaRecorder.onstop = async () => {
         cleanupAudio()
         if (!audioChunks.length) {
+          logger.warn('voice', '🎙️ 麦克风录音块为空，未录制到声音数据')
           voiceState.value = 'error'
           voiceError.value = '未检测到音频录制数据'
           resetStateAfter(3000)
           return
         }
 
-        voiceState.value = 'success'
-        appStore.toast('🎙️ 录音已完成！(音波与收音通道 100% 运行正常)')
-        resetStateAfter(3000)
+        const mimeType = mediaRecorder?.mimeType || 'audio/webm'
+        const audioBlob = new Blob(audioChunks, { type: mimeType })
+        const sizeKb = (audioBlob.size / 1024).toFixed(1)
+
+        logger.info('voice', `🎙️ [收音打印] 麦克风录音已停止！`, {
+          chunkCount: audioChunks.length,
+          sizeBytes: audioBlob.size,
+          sizeKb: `${sizeKb} KB`,
+          mimeType,
+        })
+        console.log(`[VoiceInput] 🎙️ 录音已收集完毕 | Chunk 数量: ${audioChunks.length} | 文件大小: ${sizeKb} KB | 格式: ${mimeType}`)
+
+        const aiStore = useAiStore()
+        if (aiStore.isActive && aiStore.settings.apiKey) {
+          voiceState.value = 'recognizing'
+          appStore.toast('⚡ AI 正在语音解析与转换坐标...')
+          const transcribedText = await aiStore.transcribeAudio(audioBlob)
+          if (transcribedText) {
+            logger.info('voice', `🎙️ AI 转写内容成功: "${transcribedText}"`)
+            processRecognizedText(transcribedText)
+          } else {
+            voiceState.value = 'error'
+            voiceError.value = 'AI 语音转写未成功返回文字'
+            appStore.toast('⚠️ AI 语音解析超时或未返回文字')
+            resetStateAfter(3000)
+          }
+        } else {
+          voiceState.value = 'success'
+          voiceText.value = `录音就绪 (${sizeKb} KB)`
+          logger.info('voice', `🎙️ [收音打印] 麦克风成功捕获 ${sizeKb} KB 音频！可在【设置->AI】配置 Key 启用 Whisper 转写定位`)
+          appStore.toast(`🎙️ 录音成功捕获 (${sizeKb} KB)！配置 AI Key 可解锁自动语音解析`)
+          resetStateAfter(4000)
+        }
       }
 
       mediaRecorder.start(100)
-      appStore.toast('🎙️ 微信级麦克风录音中... 再次点击按键完成收音')
+      logger.info('voice', '🎙️ MediaRecorder 已开启分段录制 (100ms slice)')
+      appStore.toast('🎙️ 微信级麦克风录音中... 再次点击按键或按 Ctrl+2 完成收音')
     } catch (e: any) {
       logger.error('voice', 'MediaRecorder 初始化失败', e)
       cleanupAudio()

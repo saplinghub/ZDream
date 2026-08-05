@@ -317,6 +317,60 @@ ${contextInstruction}
     }
   }
 
+  /** AI 语音转文字 (Whisper API) */
+  async function transcribeAudio(audioBlob: Blob): Promise<string> {
+    if (!isActive.value) {
+      logger.warn('ai', 'AI 未配置或未启用，跳过云端 Whisper 语音识别')
+      return ''
+    }
+
+    try {
+      logger.info('ai', `正在发送语音 Blob (${audioBlob.size} 字节) 到 AI Whisper 接口...`)
+      const formData = new FormData()
+      formData.append('file', audioBlob, 'voice.webm')
+      formData.append('model', 'whisper-1')
+
+      const baseUrl = settings.value.baseUrl.replace(/\/$/, '')
+      const url = `${baseUrl}/audio/transcriptions`
+
+      const headers: Record<string, string> = {}
+      if (settings.value.apiKey) {
+        headers['Authorization'] = `Bearer ${settings.value.apiKey}`
+      }
+
+      let res: Response
+      if (isTauri()) {
+        const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http')
+        res = (await tauriFetch(url, {
+          method: 'POST',
+          headers,
+          body: formData,
+          connectTimeout: 30000,
+        })) as unknown as Response
+      } else {
+        res = await fetch(url, {
+          method: 'POST',
+          headers,
+          body: formData,
+        })
+      }
+
+      if (!res.ok) {
+        const errText = await res.text()
+        logger.error('ai', `Whisper 识别失败 HTTP ${res.status}: ${errText.slice(0, 100)}`)
+        return ''
+      }
+
+      const data = (await res.json()) as { text?: string }
+      const text = data.text || ''
+      logger.info('ai', `🎙️ Whisper 转写成功结果: "${text}"`)
+      return text
+    } catch (e) {
+      logger.error('ai', 'Whisper 语音转写报错', e)
+      return ''
+    }
+  }
+
   return {
     settings,
     testing,
@@ -331,5 +385,6 @@ ${contextInstruction}
     fetchModelList,
     testConnection,
     analyzeIntentAndExtract,
+    transcribeAudio,
   }
 })
