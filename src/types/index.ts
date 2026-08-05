@@ -147,6 +147,8 @@ export interface AppSettings {
   autoOpenFloat: boolean
   /** 截图 OCR 快捷键 */
   ocrHotkey: string
+  /** 语音识别快捷键 */
+  voiceHotkey?: string
   /** 百度 OCR API Key */
   baiduApiKey: string
   /** 百度 OCR Secret Key */

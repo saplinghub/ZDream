@@ -196,11 +196,11 @@ export const useGhostStore = defineStore('ghost', () => {
     let ghostType: '血鬼' | '防鬼' | '敏鬼' | '法鬼' | '未知' = '未知'
     if (/血鬼|马面|野鬼|僵尸|捣蛋鬼|调皮鬼|顽皮鬼/i.test(clean)) ghostType = '血鬼'
     else if (/防鬼|壳鬼|骷髅怪|牛头/i.test(clean)) ghostType = '防鬼'
-    else if (/敏鬼|吸血鬼/i.test(clean)) ghostType = '敏鬼'
+    else if (/敏鬼|吸血鬼|伶俐鬼/i.test(clean)) ghostType = '敏鬼'
     else if (/法鬼|鬼王|炎魔神/i.test(clean)) ghostType = '法鬼'
 
-    // 2. 解析环数 (如果有 "第 X 环")
-    const ringMatch = clean.match(/第\s*(\d{1,2})\s*环/)
+    // 2. 解析环数 (支持 "第 X 个" 或 "第 X 环")
+    const ringMatch = clean.match(/第\s*(\d{1,2})\s*[个环]/)
     if (ringMatch) {
       const parsedRing = Number(ringMatch[1])
       if (parsedRing >= 1 && parsedRing <= 10) {
@@ -208,18 +208,23 @@ export const useGhostStore = defineStore('ghost', () => {
       }
     }
 
-    // 3. 解析数字坐标 (取出所有的 1-3 位数字)
-    const numMatches = clean.match(/\d{1,3}/g)
+    // 3. 剥离 "第X个" / "第X环" 文本，防止环数数字干扰坐标 X/Y 提取
+    const textForCoord = clean.replace(/第\s*\d{1,2}\s*[个环]/g, '')
+
+    // 4. 精准匹配坐标对 (例如 "351,103" 或 "351 103" 或 "351，103")
     let posX = 0
     let posY = 0
 
-    if (numMatches && numMatches.length >= 2) {
-      let idx = 0
-      if (ringMatch && numMatches[0] === ringMatch[1] && numMatches.length >= 3) {
-        idx = 1
+    const pairMatch = textForCoord.match(/(\d{1,3})\s*[,，\s.]+\s*(\d{1,3})/)
+    if (pairMatch) {
+      posX = Number(pairMatch[1])
+      posY = Number(pairMatch[2])
+    } else {
+      const numMatches = textForCoord.match(/\d{1,3}/g)
+      if (numMatches && numMatches.length >= 2) {
+        posX = Number(numMatches[0])
+        posY = Number(numMatches[1])
       }
-      posX = Number(numMatches[idx])
-      posY = Number(numMatches[idx + 1])
     }
 
     // 4. 解析地图 (三重保障策略)

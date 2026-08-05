@@ -242,9 +242,14 @@ onMounted(async () => {
   if (isTauri()) {
     try {
       const { listen } = await import('@tauri-apps/api/event')
-      unlistenOpen = await listen('float:open-request', () => {
-        console.info('[FloatView] float:open-request received')
-        expandAndFocus()
+      unlistenOpen = await listen('float:open-request', (ev) => {
+        console.info('[FloatView] float:open-request received', ev.payload)
+        // 如果处于展开态且触发了双向热键开关，则自动收成小球
+        if (!collapsed.value && (ev?.payload as any)?.toggle) {
+          toggleCollapse()
+        } else {
+          expandAndFocus()
+        }
       })
     } catch (e) {
       console.warn('[FloatView] listen float:open-request failed:', e)
@@ -394,7 +399,17 @@ async function toggleCollapse() {
     <!-- 展开态 -->
     <div v-else key="panel" ref="panelEl" class="panel">
       <div class="p-head" data-tauri-drag-region>
-        <span class="p-title">{{ activityStore.current?.name || '梦金囊' }}</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          <button
+            v-if="activityStore.currentId"
+            class="p-btn-back"
+            @click="activityStore.switchTo(null)"
+            title="返回上一级浮窗列表"
+          >
+            ‹
+          </button>
+          <span class="p-title">{{ activityStore.current?.name || '梦金囊' }}</span>
+        </div>
         <div style="display:flex;align-items:center;gap:6px">
           <!-- 📌 悬浮窗固定/解锁按钮 -->
           <button
@@ -498,6 +513,24 @@ html, body, #app {
   transform: rotate(180deg);
 }
 .p-btn svg { width: 12px; height: 12px; }
+.p-btn-back {
+  display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 18px; font-weight: bold; line-height: 1;
+  cursor: pointer;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+  padding-bottom: 2px;
+}
+.p-btn-back:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in oklch, var(--accent) 15%, transparent);
+}
+
 .p-btn-pin {
   display: flex; align-items: center; justify-content: center;
   width: 28px; height: 28px;

@@ -285,6 +285,7 @@ export const seedSettings: AppSettings = {
   githubProxy: '',
   autoOpenFloat: true,
   ocrHotkey: 'Ctrl+A',
+  voiceHotkey: 'Ctrl+2',
   baiduApiKey: '',
   baiduSecretKey: '',
   logLevel: 'info',

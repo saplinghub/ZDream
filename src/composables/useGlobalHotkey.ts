@@ -9,14 +9,14 @@ import { logger } from '@/utils/logger'
 
 export const FLOAT_OPEN_EVENT = 'float:open-request'
 
-/** 热键触发后：打开浮窗并通知它展开聚焦 */
-export async function triggerFloatOpen(): Promise<void> {
-  logger.info('hotkey', '触发：打开悬浮窗')
+/** 热键触发后：打开浮窗或折叠浮窗（双向切换） */
+export async function triggerFloatOpen(toggle = true): Promise<void> {
+  logger.info('hotkey', '触发：打开或折叠悬浮窗')
   await openFloat()
   if (isTauri()) {
     try {
       const { emitTo } = await import('@tauri-apps/api/event')
-      await emitTo('float', FLOAT_OPEN_EVENT, {})
+      await emitTo('float', FLOAT_OPEN_EVENT, { toggle })
       logger.info('hotkey', 'float:open-request 已发送')
     } catch (e) {
       logger.warn('hotkey', 'emitTo float 失败', e)

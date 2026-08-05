@@ -40,6 +40,9 @@ onMounted(() => {
           }
         }
       })
+      listen('voice:start', () => {
+        toggleVoiceInput()
+      })
     })
   }
 })
@@ -236,7 +239,18 @@ defineExpose({ handleEsc })
       </span>
     </div>
 
-    <!-- 5. 底部极简快速输入行 -->
+    <!-- 5. 语音录音中 iOS 级跳动提示条 -->
+    <div v-if="isRecording" class="voice-status-bar row-between">
+      <div class="row" style="gap: 6px; align-items: center">
+        <span class="pulse-red-dot"></span>
+        <span class="voice-status-text">🔴 正在倾听麦克风...（请说例如“大唐境外351 103”）</span>
+      </div>
+      <div class="voice-wave">
+        <span></span><span></span><span></span><span></span>
+      </div>
+    </div>
+
+    <!-- 6. 底部极简快速输入行 -->
     <div class="quick-input-bar row" style="gap: 6px">
       <input
         v-model="inputText"
@@ -257,7 +271,7 @@ defineExpose({ handleEsc })
         :class="{ recording: isRecording }"
         type="button"
         @click="toggleVoiceInput"
-        title="按热键或点击语音识别坐标"
+        title="按快捷键或点击唤醒语音识别坐标"
       >
         {{ isRecording ? '🔴 录音中...' : '🎙️ 语音' }}
       </button>
@@ -426,5 +440,61 @@ defineExpose({ handleEsc })
   font-size: 12px;
   padding: 4px 8px;
   border-radius: 6px;
+}
+
+.voice-status-bar {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: #f87171;
+}
+
+.pulse-red-dot {
+  width: 8px;
+  height: 8px;
+  background-color: #ef4444;
+  border-radius: 50%;
+  box-shadow: 0 0 0 rgba(239, 68, 68, 0.4);
+  animation: pulse-red 1.2s infinite;
+}
+
+@keyframes pulse-red {
+  0% {
+    transform: scale(0.9);
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+  }
+  70% {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
+  }
+  100% {
+    transform: scale(0.9);
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+.voice-wave {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 12px;
+}
+
+.voice-wave span {
+  width: 2px;
+  height: 100%;
+  background: #f87171;
+  border-radius: 1px;
+  animation: wave-bar 0.8s infinite ease-in-out alternate;
+}
+.voice-wave span:nth-child(2) { animation-delay: 0.2s; }
+.voice-wave span:nth-child(3) { animation-delay: 0.4s; }
+.voice-wave span:nth-child(4) { animation-delay: 0.6s; }
+
+@keyframes wave-bar {
+  0% { height: 3px; }
+  100% { height: 12px; }
 }
 </style>
