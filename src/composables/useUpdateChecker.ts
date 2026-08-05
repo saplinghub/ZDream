@@ -248,19 +248,33 @@ export function useUpdateChecker() {
 
   async function silentInstall(path: string): Promise<boolean> {
     try {
-      const { Command } = await import('@tauri-apps/plugin-shell')
+      const { Command, open } = await import('@tauri-apps/plugin-shell')
       if (path.endsWith('.exe')) {
-        const output = await Command.create(path, ['/S']).execute()
-        return output.code === 0
+        try {
+          // 尝试 NSIS 静默无感升级参数 (/UPDATE /S)
+          const output = await Command.create(path, ['/UPDATE', '/S']).execute()
+          if (output.code === 0) return true
+        } catch (cmdErr) {
+          logger.warn('update', 'Command.create 被系统 Shell 权限拦截，降级使用原生 Shell open 唤起安装包', cmdErr)
+        }
+        // 降级：调起安装包由用户一键覆盖安装
+        await open(path)
+        return true
       }
       if (path.endsWith('.msi')) {
-        const output = await Command.create('msiexec', ['/i', path, '/quiet', '/norestart']).execute()
-        return output.code === 0
+        try {
+          const output = await Command.create('msiexec', ['/i', path, '/quiet', '/norestart']).execute()
+          if (output.code === 0) return true
+        } catch { /* ignore fallback */ }
+        await open(path)
+        return true
       }
-      const { open } = await import('@tauri-apps/plugin-shell')
       await open(path)
       return true
-    } catch { return false }
+    } catch (e) {
+      logger.error('update', '唤起安装包失败', e)
+      return false
+    }
   }
 
   function cancelDownload() {
