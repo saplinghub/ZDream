@@ -6,14 +6,15 @@ import { useOcrStore } from '@/stores/ocr'
 import { useActivityStore } from '@/stores/activity'
 import { isTauri } from '@/platform/desktop'
 import GhostMapRadar from '@/components/ui/GhostMapRadar.vue'
+import { useVoiceInput } from '@/composables/useVoiceInput'
 
 const appStore = useAppStore()
 const ghostStore = useGhostStore()
 const ocrStore = useOcrStore()
 const activityStore = useActivityStore()
+const { voiceState, voiceText, voiceError, startListening } = useVoiceInput()
 
 const inputText = ref('')
-const isRecording = ref(false)
 
 // 定时递增总计时秒数
 const timerNow = ref(Date.now())
@@ -41,7 +42,7 @@ onMounted(() => {
         }
       })
       listen('voice:start', () => {
-        toggleVoiceInput()
+        startListening()
       })
     })
   }
@@ -68,6 +69,14 @@ watch(
   { immediate: true, deep: true },
 )
 
+// 自动监听语音输入
+watch(voiceText, (newVal) => {
+  if (newVal) {
+    inputText.value = newVal
+    ghostStore.parseAndSet(newVal)
+  }
+})
+
 /** 格式化整轮计时 (MM:SS) */
 const sessionTimerFormatted = computed(() => {
   if (ghostStore.sessionStatus !== 'running' || !ghostStore.sessionStartTime) return '00:00'
@@ -79,11 +88,12 @@ const sessionTimerFormatted = computed(() => {
 
 /** 本只鬼已消耗时间 */
 const curGhostSecondsFormatted = computed(() => {
-  if (ghostStore.sessionStatus !== 'running' || !ghostStore.lastGhostStartTime) return '0秒'
-  const elapsedSec = Math.max(0, Math.floor((timerNow.value - ghostStore.lastGhostStartTime) / 1000))
-  const m = Math.floor(elapsedSec / 60)
-  const s = elapsedSec % 60
-  return m > 0 ? `${m}分${s}秒` : `${s}秒`
+  if (ghostStore.sessionStatus !== 'running' || !ghostStore.lastGhostStartTime) return '00秒'
+  const sec = Math.max(0, Math.floor((timerNow.value - ghostStore.lastGhostStartTime) / 1000))
+  const m = Math.floor(sec / 60)
+  const s = sec % 60
+  if (m > 0) return `${m}分${s}秒`
+  return `${s}秒`
 })
 
 function handleInput() {
@@ -93,36 +103,6 @@ function handleInput() {
     inputText.value = ''
   } else {
     appStore.toast('未匹配到地图，示例：jy 120 45')
-  }
-}
-
-function toggleVoiceInput() {
-  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-    appStore.toast('当前环境不支持语音识别')
-    return
-  }
-  try {
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-    const recognition = new SpeechRecognition()
-    recognition.lang = 'zh-CN'
-    recognition.continuous = false
-
-    isRecording.value = true
-    recognition.onresult = (event: any) => {
-      isRecording.value = false
-      const speechResult = event.results[0][0].transcript
-      inputText.value = speechResult
-      ghostStore.parseAndSet(speechResult)
-      appStore.toast(`🎙️ 语音已识别: "${speechResult}"`)
-    }
-    recognition.onerror = () => {
-      isRecording.value = false
-      appStore.toast('语音识别超时，请重试')
-    }
-    recognition.start()
-  } catch {
-    isRecording.value = false
   }
 }
 
@@ -243,12 +223,21 @@ defineExpose({ handleEsc })
     </div>
 
     <!-- 5. 语音录音中 iOS 级跳动提示条 -->
-    <div v-if="isRecording" class="voice-status-bar row-between">
-      <div class="row" style="gap: 6px; align-items: center">
+    <div v-if="voiceState !== 'idle'" class="voice-status-bar row-between" :class="voiceState">
+      <div v-if="voiceState === 'listening'" class="row" style="gap: 6px; align-items: center">
         <span class="pulse-red-dot"></span>
         <span class="voice-status-text">🔴 正在倾听麦克风...（请说例如“大唐境外351 103”）</span>
       </div>
-      <div class="voice-wave">
+      <div v-else-if="voiceState === 'recognizing'" class="row" style="gap: 6px; align-items: center">
+        <span class="voice-status-text">⚡ AI 正在转换为数字坐标...</span>
+      </div>
+      <div v-else-if="voiceState === 'success'" class="row" style="gap: 6px; align-items: center">
+        <span class="voice-status-text">✅ 已识别: "{{ voiceText }}"</span>
+      </div>
+      <div v-else-if="voiceState === 'error'" class="row" style="gap: 6px; align-items: center">
+        <span class="voice-status-text">⚠️ {{ voiceError || '未听到语音，按 Ctrl+2 重试' }}</span>
+      </div>
+      <div v-if="voiceState === 'listening'" class="voice-wave">
         <span></span><span></span><span></span><span></span>
       </div>
     </div>
@@ -271,12 +260,12 @@ defineExpose({ handleEsc })
       </button>
       <button
         class="btn btn-secondary btn-xs mic-btn"
-        :class="{ recording: isRecording }"
+        :class="{ recording: voiceState === 'listening' }"
         type="button"
-        @click="toggleVoiceInput"
-        title="按快捷键或点击唤醒语音识别坐标"
+        @click="startListening"
+        title="按 Ctrl+2 或点击唤醒语音识别坐标"
       >
-        {{ isRecording ? '🔴 录音中...' : '🎙️ 语音' }}
+        {{ voiceState === 'listening' ? '🔴 录音中...' : '🎙️ 语音 (Ctrl+2)' }}
       </button>
       <button class="btn btn-primary btn-xs btn-locate" type="button" @click="handleInput">
         定位

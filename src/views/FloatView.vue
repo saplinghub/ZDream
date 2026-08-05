@@ -7,8 +7,11 @@ import { getActivity } from '@/activities/registry'
 import { showMainWindow } from '@/platform/windows'
 import { isTauri } from '@/platform/desktop'
 
+import { useVoiceInput } from '@/composables/useVoiceInput'
+
 const store = useAppStore()
 const activityStore = useActivityStore()
+const { voiceState, voiceText, voiceError, startListening } = useVoiceInput()
 const collapsed = ref(false)
 
 // ── 点击 vs 拖动（绝对定位 + 物理坐标统一 + 静态导入）──
@@ -16,6 +19,75 @@ let mouseDownPos = { x: 0, y: 0 }
 const isDragging = ref(false)
 const pressing = ref(false)
 const DRAG_THRESHOLD = 5
+let unlistenFocus: (() => void) | null = null
+let unlistenVoice: (() => void) | null = null
+
+onMounted(async () => {
+  forceTransparent()
+  restoreBallPos()
+  window.addEventListener('keydown', onKeydown)
+  window.addEventListener('mouseenter', autoFocusInput)
+  window.addEventListener('focus', autoFocusInput)
+  window.addEventListener('blur', onBlur)
+
+  if (typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(() => {
+      syncDynamicWindowSize()
+    })
+    if (panelEl.value) resizeObserver.observe(panelEl.value)
+  }
+
+  if (isTauri()) {
+    import('@tauri-apps/api/webviewWindow').then(async ({ getCurrentWebviewWindow }) => {
+      const win = getCurrentWebviewWindow()
+      win.setAlwaysOnTop(true).catch(() => {})
+      try {
+        unlistenFocus = await win.onFocusChanged(({ payload: focused }) => {
+          console.info('[FloatView] 原生 OS 窗口焦点变动 focused =', focused)
+          if (!focused) {
+            onBlur()
+          }
+        })
+      } catch { /* ignore */ }
+    })
+    try {
+      if (!collapsed.value) {
+        await setSize(PANEL_W, PANEL_H)
+      }
+    } catch { /* ignore */ }
+    try {
+      const { listen } = await import('@tauri-apps/api/event')
+      unlistenOpen = await listen('float:open-request', (ev) => {
+        console.info('[FloatView] float:open-request received', ev.payload)
+        if (!collapsed.value && (ev?.payload as any)?.toggle) {
+          toggleCollapse()
+        } else {
+          expandAndFocus()
+        }
+      })
+      unlistenVoice = await listen('voice:start', () => {
+        console.info('[FloatView] voice:start received')
+        startListening()
+      })
+    } catch (e) {
+      console.warn('[FloatView] listen float:open-request failed:', e)
+    }
+  }
+  if (!collapsed.value) {
+    setTimeout(autoFocusInput, 300)
+  }
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('mouseenter', autoFocusInput)
+  window.removeEventListener('focus', autoFocusInput)
+  window.removeEventListener('blur', onBlur)
+  resizeObserver?.disconnect()
+  unlistenOpen?.()
+  unlistenFocus?.()
+  unlistenVoice?.()
+})
 
 function onBallDown(e: MouseEvent) {
   if (e.button !== 0) return
@@ -171,8 +243,6 @@ function syncDynamicWindowSize() {
   }
 }
 
-let unlistenFocus: (() => void) | null = null
-
 onMounted(async () => {
   forceTransparent()
   restoreBallPos()
@@ -313,19 +383,44 @@ async function toggleCollapse() {
 
 <template>
   <Transition name="float">
-    <!-- 收起态：纯透明悬浮球 -->
+    <!-- 收起态：纯透明悬浮球 (带 iPhone 级麦克风脉冲红点) -->
     <div
       v-if="collapsed"
       key="ball"
       class="ball"
-      :class="{ pressing: pressing, dragging: isDragging }"
+      :class="{ pressing: pressing, dragging: isDragging, 'voice-active': voiceState !== 'idle' }"
       @mousedown="onBallDown"
     >
       <span class="ball-letter">{{ activityStore.ballText }}</span>
+      <span v-if="voiceState === 'listening'" class="v-dot-pulse-red" title="麦克风收音中..."></span>
+      <span v-else-if="voiceState === 'recognizing'" class="v-dot-pulse-blue" title="AI转译中..."></span>
+      <span v-else-if="voiceState === 'success'" class="v-dot-green" title="识别成功"></span>
+      <span v-else-if="voiceState === 'error'" class="v-dot-warn" title="识别未成功"></span>
     </div>
 
     <!-- 展开态 -->
     <div v-else key="panel" ref="panelEl" class="panel">
+      <!-- 🎙️ iPhone 级 iOS 动态岛全局语音状态条 -->
+      <div v-if="voiceState !== 'idle'" class="voice-status-island" :class="voiceState">
+        <div v-if="voiceState === 'listening'" class="v-island-row">
+          <span class="pulse-red-dot"></span>
+          <span class="v-island-text">🔴 正在倾听麦克风... (请说如"大唐境外 351 103")</span>
+          <div class="v-sound-wave"><span></span><span></span><span></span><span></span></div>
+        </div>
+        <div v-else-if="voiceState === 'recognizing'" class="v-island-row">
+          <span class="blue-spark">⚡</span>
+          <span class="v-island-text">AI 正在转换语音成数字坐标...</span>
+        </div>
+        <div v-else-if="voiceState === 'success'" class="v-island-row">
+          <span class="green-check">✅</span>
+          <span class="v-island-text">识别成功: "{{ voiceText }}"</span>
+        </div>
+        <div v-else-if="voiceState === 'error'" class="v-island-row">
+          <span class="warn-mark">⚠️</span>
+          <span class="v-island-text">{{ voiceError || '未听到声音，按 Ctrl+2 重试' }}</span>
+        </div>
+      </div>
+
       <div class="p-head" data-tauri-drag-region>
         <div style="display:flex;align-items:center;gap:6px">
           <button
@@ -632,5 +727,66 @@ html, body, #app {
   opacity: 0;
   transition: none;
   pointer-events: none;
+}
+
+/* ─── 🎙️ iPhone 级 语音识别指示器 ─── */
+.v-dot-pulse-red {
+  position: absolute; top: -1px; right: -1px; width: 14px; height: 14px;
+  border-radius: 50%; background: #ef4444; border: 2px solid rgba(255,255,255,0.9);
+  z-index: 10; box-shadow: 0 0 10px #ef4444;
+  animation: pulse-red 1.2s infinite ease-in-out;
+}
+.v-dot-pulse-blue {
+  position: absolute; top: -1px; right: -1px; width: 14px; height: 14px;
+  border-radius: 50%; background: #3b82f6; border: 2px solid rgba(255,255,255,0.9);
+  z-index: 10; box-shadow: 0 0 10px #3b82f6;
+  animation: pulse-blue 1s infinite ease-in-out;
+}
+.v-dot-green {
+  position: absolute; top: -1px; right: -1px; width: 12px; height: 12px;
+  border-radius: 50%; background: #22c55e; border: 2px solid rgba(255,255,255,0.9); z-index: 10;
+}
+.v-dot-warn {
+  position: absolute; top: -1px; right: -1px; width: 12px; height: 12px;
+  border-radius: 50%; background: #f59e0b; border: 2px solid rgba(255,255,255,0.9); z-index: 10;
+}
+
+@keyframes pulse-red {
+  0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+  70% { transform: scale(1.15); box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+  100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+@keyframes pulse-blue {
+  0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+  70% { transform: scale(1.15); box-shadow: 0 0 0 8px rgba(59, 130, 246, 0); }
+  100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+}
+
+.voice-status-island {
+  padding: 8px 12px; font-size: 11px; font-weight: 600;
+  background: color-mix(in oklch, var(--surface) 90%, #000);
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.voice-status-island.listening { background: color-mix(in oklch, #ef4444 12%, var(--surface)); color: #ef4444; }
+.voice-status-island.recognizing { background: color-mix(in oklch, #3b82f6 12%, var(--surface)); color: #3b82f6; }
+.voice-status-island.success { background: color-mix(in oklch, #22c55e 12%, var(--surface)); color: #22c55e; }
+.voice-status-island.error { background: color-mix(in oklch, #f59e0b 12%, var(--surface)); color: #f59e0b; }
+
+.v-island-row { display: flex; align-items: center; gap: 8px; width: 100%; }
+.v-island-text { flex: 1; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.v-sound-wave { display: flex; align-items: center; gap: 2px; }
+.v-sound-wave span {
+  display: inline-block; width: 2.5px; height: 12px; background: #ef4444; border-radius: 2px;
+  animation: wave-bar 1.2s infinite ease-in-out;
+}
+.v-sound-wave span:nth-child(2) { animation-delay: 0.2s; }
+.v-sound-wave span:nth-child(3) { animation-delay: 0.4s; }
+.v-sound-wave span:nth-child(4) { animation-delay: 0.6s; }
+
+@keyframes wave-bar {
+  0%, 100% { height: 4px; }
+  50% { height: 14px; }
 }
 </style>

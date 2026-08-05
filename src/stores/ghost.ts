@@ -49,18 +49,24 @@ const STORAGE_HISTORY_KEY = 'mhxy-zdream:ghost-history-sessions'
 /** 将文本中的中文数字 (如 "四十五"、"七十二"、"一百二十六"、"一十五") 转换为阿拉伯数字 ("45", "72", "126", "15") */
 export function normalizeChineseNumbers(text: string): string {
   if (!text) return ''
-  const cnDigits: Record<string, number> = {
-    '零': 0, '〇': 0, '一': 1, '二': 2, '两': 2, '三': 3, '四': 4,
-    '五': 5, '六': 6, '七': 7, '八': 8, '九': 9
+  const cnMap: Record<string, string> = {
+    '零': '0', '〇': '0', '一': '1', '二': '2', '两': '2', '三': '3', '四': '4',
+    '五': '5', '六': '6', '七': '7', '八': '8', '九': '9'
   }
 
-  return text.replace(/([零一二两三四五六七八九十百]{2,})/g, (match) => {
+  // 1. 连续中文数字转换（三五一 -> 351, 一百零三 -> 103）
+  let result = text.replace(/([零一二两三四五六七八九十百]{2,})/g, (match) => {
     let total = 0
     let temp = 0
+    let isPositional = !match.includes('十') && !match.includes('百')
+    if (isPositional) {
+      return match.split('').map(c => cnMap[c] ?? c).join('')
+    }
     for (let i = 0; i < match.length; i++) {
       const char = match[i]
-      if (cnDigits[char] !== undefined) {
-        temp = cnDigits[char]
+      const digit = cnMap[char] ? Number(cnMap[char]) : undefined
+      if (digit !== undefined) {
+        temp = digit
         if (i === match.length - 1) total += temp
       } else if (char === '十') {
         if (temp === 0) temp = 1
@@ -74,6 +80,12 @@ export function normalizeChineseNumbers(text: string): string {
     }
     return total > 0 ? String(total) : match
   })
+
+  // 2. 替换单个汉字数字（如 "境外 三 五 一" -> "境外 3 5 1"）
+  for (const [cn, num] of Object.entries(cnMap)) {
+    result = result.split(cn).join(num)
+  }
+  return result
 }
 
 export const useGhostStore = defineStore('ghost', () => {
