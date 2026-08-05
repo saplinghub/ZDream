@@ -27,21 +27,28 @@ function onBallDown(e: MouseEvent) {
   isDragging.value = false
   mouseDownPos = { x: e.clientX, y: e.clientY }
 
-  if (isTauri()) {
-    // 唤起 Windows / macOS 原生 C 层硬件加速窗口拖拽 (144Hz 极速丝滑不卡顿)
-    import('@tauri-apps/api/webviewWindow').then(({ getCurrentWebviewWindow }) => {
-      getCurrentWebviewWindow().startDragging().catch(() => {})
-    })
-  }
-
+  document.addEventListener('mousemove', onBallMove)
   document.addEventListener('mouseup', onBallUp)
 }
 
-function onBallUp(e: MouseEvent) {
+function onBallMove(e: MouseEvent) {
+  if (isDragging.value) return
+  const dist = Math.abs(e.clientX - mouseDownPos.x) + Math.abs(e.clientY - mouseDownPos.y)
+  if (dist >= DRAG_THRESHOLD) {
+    isDragging.value = true
+    if (isTauri()) {
+      import('@tauri-apps/api/webviewWindow').then(({ getCurrentWebviewWindow }) => {
+        getCurrentWebviewWindow().startDragging().catch(() => {})
+      })
+    }
+  }
+}
+
+function onBallUp(_e: MouseEvent) {
+  document.removeEventListener('mousemove', onBallMove)
   document.removeEventListener('mouseup', onBallUp)
   pressing.value = false
-  const dist = Math.abs(e.clientX - mouseDownPos.x) + Math.abs(e.clientY - mouseDownPos.y)
-  if (dist < DRAG_THRESHOLD) {
+  if (!isDragging.value) {
     console.info('[drag] 点击触发 展开/收起')
     toggleCollapse()
   } else {
@@ -233,6 +240,8 @@ function togglePin() {
 
 async function onBlur() {
   if (collapsed.value || isPinned.value) return
+  // 600ms 防误收起保护：如果刚通过快捷键或点击展开不到 600ms，忽略焦点的闪烁 blur
+  if (Date.now() - lastToggleTime < 600) return
   const { x: lx, y: ly, scale } = await getWinLogicalPos()
   const anchorX = lx + ANCHOR_X
   const anchorY = ly + ANCHOR_Y
