@@ -271,40 +271,96 @@ export function useUpdateChecker() {
   }
 
   async function openFile(path: string): Promise<boolean> {
+    logger.info('update', `尝试打开文件: ${path}`)
+    download.value.error = ''
     try {
-      const { open } = await import('@tauri-apps/plugin-shell')
-      await open(path)
-      return true
-    } catch { return false }
+      if (!path) throw new Error('安装包路径为空')
+      const { Command, open } = await import('@tauri-apps/plugin-shell')
+      try {
+        await open(path)
+        download.value.statusText = '已成功向系统唤起安装包'
+        return true
+      } catch (openErr) {
+        logger.warn('update', `plugin-shell open 失败，尝试 PowerShell explorer/Start-Process 打开: ${String(openErr)}`)
+        const ps = `Start-Process -FilePath "${path.replace(/"/g, '`"')}"`
+        await Command.create('powershell', ['-NoProfile', '-Command', ps]).execute()
+        download.value.statusText = '已通过 PowerShell 唤起安装包'
+        return true
+      }
+    } catch (e) {
+      const errStr = e instanceof Error ? e.message : String(e)
+      logger.error('update', `打开安装包失败: ${errStr}`, e)
+      download.value.error = `打开文件失败: ${errStr}`
+      return false
+    }
   }
 
   async function silentInstall(path: string): Promise<boolean> {
+    logger.info('update', `开始尝试静默/唤起安装: ${path}`)
+    download.value.statusText = '正在调起安装程序...'
+    download.value.error = ''
+
     try {
+      if (!path) throw new Error('安装包路径为空，请重新下载')
       const { Command, open } = await import('@tauri-apps/plugin-shell')
+
       if (path.endsWith('.exe')) {
+        // 1. 尝试 Command.create 静默升级参数 /UPDATE /S
         try {
-          // 尝试 NSIS 静默无感升级参数 (/UPDATE /S)
+          logger.info('update', `尝试 Command.create('${path}', ['/UPDATE', '/S'])`)
           const output = await Command.create(path, ['/UPDATE', '/S']).execute()
-          if (output.code === 0) return true
+          logger.info('update', `Command.create 返回 exitCode=${output.code}`)
+          if (output.code === 0) {
+            download.value.statusText = '已调起静默安装，请退出应用完成更新！'
+            return true
+          }
         } catch (cmdErr) {
-          logger.warn('update', 'Command.create 被系统 Shell 权限拦截，降级使用原生 Shell open 唤起安装包', cmdErr)
+          logger.warn('update', `Command.create 被系统 Shell 权限拦截: ${String(cmdErr)}，降级尝试原生 open...`, cmdErr)
         }
-        // 降级：调起安装包由用户一键覆盖安装
-        await open(path)
-        return true
+
+        // 2. 尝试 plugin-shell open(path)
+        try {
+          logger.info('update', `尝试 plugin-shell open('${path}')`)
+          await open(path)
+          download.value.statusText = '已唤起系统安装程序，请在弹出的安装窗口中完成更新！'
+          return true
+        } catch (openErr) {
+          logger.warn('update', `plugin-shell open 失败: ${String(openErr)}，尝试 PowerShell 强制 Start-Process...`, openErr)
+        }
+
+        // 3. 尝试 PowerShell Start-Process 保底
+        try {
+          logger.info('update', `尝试 PowerShell Start-Process '${path}'`)
+          const ps = `Start-Process -FilePath "${path.replace(/"/g, '`"')}"`
+          await Command.create('powershell', ['-NoProfile', '-Command', ps]).execute()
+          download.value.statusText = '已通过 PowerShell 成功唤起安装程序！'
+          return true
+        } catch (psErr) {
+          logger.error('update', `PowerShell 唤起依然失败: ${String(psErr)}`, psErr)
+          throw new Error(`系统 Shell 拦截阻断安装包调起：${String(psErr)}`)
+        }
       }
+
       if (path.endsWith('.msi')) {
         try {
           const output = await Command.create('msiexec', ['/i', path, '/quiet', '/norestart']).execute()
-          if (output.code === 0) return true
-        } catch { /* ignore fallback */ }
+          if (output.code === 0) {
+            download.value.statusText = '已向 msiexec 发送静默安装指令'
+            return true
+          }
+        } catch { /* ignore */ }
         await open(path)
+        download.value.statusText = '已唤起 MSI 安装包'
         return true
       }
+
       await open(path)
+      download.value.statusText = '已唤起安装文件'
       return true
     } catch (e) {
-      logger.error('update', '唤起安装包失败', e)
+      const errStr = e instanceof Error ? e.message : String(e)
+      logger.error('update', `静默安装完全失败: ${errStr}`, e)
+      download.value.error = `安装唤起失败: ${errStr}`
       return false
     }
   }

@@ -805,21 +805,26 @@ const activeTab = ref<'account' | 'shortcut' | 'appearance' | 'ai' | 'advanced'>
             >
               🌐 前往 Releases 下载
             </a>
-            <div v-else-if="updater.download.value.savedPath" style="display: flex; gap: 8px">
-              <button
-                class="btn btn-primary"
-                type="button"
-                @click="updater.silentInstall(updater.download.value.savedPath)"
-              >
-                静默安装
-              </button>
-              <button
-                class="btn btn-secondary"
-                type="button"
-                @click="updater.openFile(updater.download.value.savedPath)"
-              >
-                手动安装
-              </button>
+            <div v-else-if="updater.download.value.savedPath" style="display: flex; flex-direction: column; gap: 6px; align-items: flex-end">
+              <div style="display: flex; gap: 8px">
+                <button
+                  class="btn btn-primary"
+                  type="button"
+                  @click="updater.silentInstall(updater.download.value.savedPath)"
+                >
+                  静默安装
+                </button>
+                <button
+                  class="btn btn-secondary"
+                  type="button"
+                  @click="updater.openFile(updater.download.value.savedPath)"
+                >
+                  手动安装
+                </button>
+              </div>
+              <div v-if="updater.download.value.statusText" style="font-size: 11px; color: var(--accent); font-weight: 600">
+                {{ updater.download.value.statusText }}
+              </div>
             </div>
           </template>
         </div>
