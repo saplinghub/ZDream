@@ -29,24 +29,7 @@ export function useVoiceInput() {
     }, ms)
   }
 
-  async function requestMicPermission(): Promise<boolean> {
-    try {
-      if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-        stream.getTracks().forEach((t) => t.stop())
-        return true
-      }
-      const legacy = (navigator as any).getUserMedia || (navigator as any).webkitGetUserMedia
-      if (legacy) {
-        await new Promise((resolve, reject) => legacy.call(navigator, { audio: true }, resolve, reject))
-        return true
-      }
-      return true
-    } catch (e: any) {
-      console.warn('[VoiceInput] 麦克风权限请求失败:', e)
-      return false
-    }
-  }
+
 
   async function startListening() {
     if (typeof window === 'undefined') return
@@ -73,16 +56,6 @@ export function useVoiceInput() {
       voiceState.value = 'listening'
       voiceText.value = ''
       voiceError.value = ''
-
-      // 提前唤起麦克风授权弹窗
-      const micGranted = await requestMicPermission()
-      if (!micGranted) {
-        voiceState.value = 'error'
-        voiceError.value = '麦克风权限被拒绝（请在系统隐私设置中允许梦金囊访问麦克风）'
-        appStore.toast('⚠️ 麦克风权限被拒绝，请在系统设置中开启')
-        resetStateAfter(4000)
-        return
-      }
 
       if (recognitionInstance) {
         try { recognitionInstance.abort() } catch { /* ignore */ }
