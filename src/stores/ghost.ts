@@ -112,6 +112,24 @@ export const useGhostStore = defineStore('ghost', () => {
   function endSession() {
     if (sessionStatus.value === 'running') {
       const now = Date.now()
+
+      // 如果当前还有进行中的任务且运行超过 3 秒，自动归档结算最后一只鬼
+      if (currentTask.value && lastGhostStartTime.value > 0) {
+        const lapSec = Math.max(1, Math.round((now - lastGhostStartTime.value) / 1000))
+        if (lapSec >= 3) {
+          lapRecords.value.push({
+            id: uid(),
+            ringIndex: currentTask.value.ringIndex,
+            mapName: currentTask.value.mapName,
+            posX: currentTask.value.posX,
+            posY: currentTask.value.posY,
+            ghostType: currentTask.value.ghostType,
+            durationSeconds: lapSec,
+            timestamp: now,
+          })
+        }
+      }
+
       const totalDurationSeconds = Math.max(1, Math.round((now - (sessionStartTime.value || now)) / 1000))
       const totalGhosts = lapRecords.value.length
       const avgSecondsPerGhost = totalGhosts > 0 ? Math.round(totalDurationSeconds / totalGhosts) : 0
@@ -260,24 +278,36 @@ export const useGhostStore = defineStore('ghost', () => {
     if (targetMap) {
       const now = Date.now()
 
-      // ⏱️ 如果尚未处于开始状态，自动触发开始抓鬼计时！
+      // ⏱️ 如果尚未处于开始状态，自动触发开始抓鬼会话！
       if (sessionStatus.value !== 'running') {
-        startSession()
-      } else if (currentTask.value) {
-        // 如果之前已有上一只鬼，计算上一只鬼的消耗时间并记入圈数日志
-        const lapSec = Math.max(1, Math.round((now - (lastGhostStartTime.value || now)) / 1000))
-        lapRecords.value.push({
-          id: uid(),
-          ringIndex: currentTask.value.ringIndex,
-          mapName: currentTask.value.mapName,
-          posX: currentTask.value.posX,
-          posY: currentTask.value.posY,
-          ghostType: currentTask.value.ghostType,
-          durationSeconds: lapSec,
-          timestamp: now,
-        })
+        sessionStatus.value = 'running'
+        sessionStartTime.value = now
         lastGhostStartTime.value = now
+        lapRecords.value = []
         saveSessionStorage()
+      } else if (currentTask.value) {
+        // 检查是否是重复扫码同一个坐标
+        const isSameTask =
+          currentTask.value.mapName === targetMap.name &&
+          currentTask.value.posX === posX &&
+          currentTask.value.posY === posY
+
+        if (!isSameTask) {
+          // 判定上一只鬼已击杀完成！计算上一只鬼消耗的时间并推入圈数记录
+          const lapSec = Math.max(1, Math.round((now - (lastGhostStartTime.value || now)) / 1000))
+          lapRecords.value.push({
+            id: uid(),
+            ringIndex: currentTask.value.ringIndex,
+            mapName: currentTask.value.mapName,
+            posX: currentTask.value.posX,
+            posY: currentTask.value.posY,
+            ghostType: currentTask.value.ghostType,
+            durationSeconds: lapSec,
+            timestamp: now,
+          })
+          lastGhostStartTime.value = now
+          saveSessionStorage()
+        }
       }
 
       const tactics = GHOST_TACTICS_MAP[ghostType] || GHOST_TACTICS_MAP['未知']

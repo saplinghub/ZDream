@@ -166,6 +166,9 @@ defineExpose({ handleEsc })
         >
           ⏱️ {{ sessionTimerFormatted }}
         </span>
+        <span v-if="ghostStore.sessionStatus === 'running'" class="lap-count-badge">
+          已完: {{ ghostStore.lapRecords.length }}只
+        </span>
       </div>
 
       <div class="row" style="gap: 6px; align-items: center">
@@ -318,9 +321,19 @@ defineExpose({ handleEsc })
   border: 1px solid var(--border);
 }
 .timer-badge.active {
-  background: color-mix(in oklch, var(--accent) 15%, var(--surface));
+  background: color-mix(in oklch, var(--accent) 15%, transparent);
   color: var(--accent);
   border-color: var(--accent);
+}
+
+.lap-count-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: color-mix(in oklch, var(--accent) 15%, var(--surface));
+  color: var(--accent);
+  border: 1px solid color-mix(in oklch, var(--accent) 30%, transparent);
 }
 
 .btn-stop {
