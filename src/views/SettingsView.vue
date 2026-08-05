@@ -786,16 +786,26 @@ const activeTab = ref<'account' | 'shortcut' | 'appearance' | 'ai' | 'advanced'>
         </div>
         <div class="actions">
           <button class="btn btn-secondary" type="button" @click="showUpdateModal = false">关闭</button>
-          <template v-if="updater.status.value.info?.best && !updater.download.value.downloading">
+          <template v-if="!updater.download.value.downloading">
             <button
-              v-if="!updater.download.value.savedPath"
+              v-if="updater.status.value.info?.best && !updater.download.value.savedPath"
               class="btn btn-primary"
               type="button"
               @click="doDownload(updater.status.value.info.best.url, updater.status.value.info.best.name)"
             >
-              下载并安装
+              🚀 一键下载并安装
             </button>
-            <div v-else style="display: flex; gap: 8px">
+            <a
+              v-else-if="!updater.download.value.savedPath && updater.status.value.info?.downloadUrl"
+              class="btn btn-primary"
+              :href="updater.status.value.info.downloadUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              style="text-decoration: none"
+            >
+              🌐 前往 Releases 下载
+            </a>
+            <div v-else-if="updater.download.value.savedPath" style="display: flex; gap: 8px">
               <button
                 class="btn btn-primary"
                 type="button"
@@ -810,9 +820,6 @@ const activeTab = ref<'account' | 'shortcut' | 'appearance' | 'ai' | 'advanced'>
               >
                 手动安装
               </button>
-            </div>
-            <div v-if="updater.download.value.savedPath" style="font-size: 11px; color: var(--muted); margin-top: 6px">
-              静默安装：后台自动完成，安装后重启应用即可。手动安装：弹出安装向导逐步操作。
             </div>
           </template>
         </div>

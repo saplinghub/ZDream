@@ -174,18 +174,50 @@ export function useUpdateChecker() {
             }
             if (latestTag) {
               const latest = parseVersion(latestTag)
+              const tagVer = latestTag.startsWith('v') ? latestTag : `v${latestTag}`
+              const numVer = latest.replace(/^v/, '')
               const hasUpdate = compareVersion(latest, parseVersion(current)) > 0
+
+              // 自动根据平台推导安装包资源与候选 URL
+              const platform = detectPlatform()
+              const fallbackAssets: UpdateAsset[] = []
+              if (platform === 'windows') {
+                fallbackAssets.push({
+                  name: `ZDream_${numVer}_x64-setup.exe`,
+                  url: `https://github.com/saplinghub/ZDream/releases/download/${tagVer}/ZDream_${numVer}_x64-setup.exe`,
+                  size: 15 * 1024 * 1024,
+                })
+                fallbackAssets.push({
+                  name: `ZDream_${tagVer}_x64-setup.exe`,
+                  url: `https://github.com/saplinghub/ZDream/releases/download/${tagVer}/ZDream_${tagVer}_x64-setup.exe`,
+                  size: 15 * 1024 * 1024,
+                })
+              } else if (platform === 'macos') {
+                fallbackAssets.push({
+                  name: `ZDream_${numVer}_x64.dmg`,
+                  url: `https://github.com/saplinghub/ZDream/releases/download/${tagVer}/ZDream_${numVer}_x64.dmg`,
+                  size: 25 * 1024 * 1024,
+                })
+              } else {
+                fallbackAssets.push({
+                  name: `ZDream-setup.exe`,
+                  url: `https://github.com/saplinghub/ZDream/releases/download/${tagVer}/ZDream-setup.exe`,
+                  size: 15 * 1024 * 1024,
+                })
+              }
+              const { myAssets, best } = filterMyAssets(fallbackAssets)
+
               info = {
                 currentVersion: current,
                 latestVersion: latestTag,
                 hasUpdate,
-                body: '（已通过 GitHub Releases Atom 获取到新版本 notification）',
-                downloadUrl: GITHUB_RELEASES,
-                assets: [],
-                myAssets: [],
-                best: null,
+                body: '检测到最新 Release 版本！点击下方按钮即可通过多镜像高速通道下载并安装升级包。',
+                downloadUrl: `https://github.com/saplinghub/ZDream/releases/tag/${tagVer}`,
+                assets: fallbackAssets,
+                myAssets,
+                best: best || fallbackAssets[0] || null,
               }
-              logger.info('update', `Atom 回退解析成功: 最新 v${info.latestVersion} | 有更新: ${hasUpdate}`)
+              logger.info('update', `Atom 回退解析成功: 最新 v${info.latestVersion} | 有更新: ${hasUpdate} | 生成候选包: ${fallbackAssets.length}个`)
             }
           }
           if (!info) {
