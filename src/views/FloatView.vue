@@ -11,7 +11,7 @@ import { useVoiceInput } from '@/composables/useVoiceInput'
 
 const store = useAppStore()
 const activityStore = useActivityStore()
-const { voiceState, voiceText, voiceError, startListening } = useVoiceInput()
+const { voiceState, voiceText, voiceError } = useVoiceInput()
 const collapsed = ref(false)
 
 // ── 点击 vs 拖动（绝对定位 + 物理坐标统一 + 静态导入）──
@@ -67,7 +67,8 @@ onMounted(async () => {
       })
       unlistenVoice = await listen('voice:start', () => {
         console.info('[FloatView] voice:start received')
-        startListening()
+        expandAndFocus()
+        store.toast('🎙️ 快捷键已唤出定位面板！点击【🎙️ 语音】大声说坐标')
       })
     } catch (e) {
       console.warn('[FloatView] listen float:open-request failed:', e)
