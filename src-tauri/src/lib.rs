@@ -14,6 +14,8 @@ fn log_to_terminal(level: String, tag: String, msg: String) {
 #[tauri::command]
 fn capture_full_screen() -> Result<String, String> {
     use base64::Engine;
+    use std::io::Cursor;
+
     let screens = screenshots::Screen::all().map_err(|e| format!("未找到可用显示器: {}", e))?;
     if screens.is_empty() {
         return Err("未检测到显示器设备".to_string());
@@ -24,7 +26,11 @@ fn capture_full_screen() -> Result<String, String> {
     });
 
     let image = screen.capture().map_err(|e| format!("原生截图捕获失败: {}", e))?;
-    let png_bytes = image.to_png().map_err(|e| format!("图片编码 PNG 失败: {}", e))?;
+    let mut png_bytes = Vec::new();
+    let mut cursor = Cursor::new(&mut png_bytes);
+    image.write_to(&mut cursor, image::ImageOutputFormat::Png)
+        .map_err(|e| format!("图片编码 PNG 失败: {}", e))?;
+
     let b64 = base64::engine::general_purpose::STANDARD.encode(&png_bytes);
     Ok(b64)
 }
