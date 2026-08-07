@@ -11,6 +11,24 @@ fn log_to_terminal(level: String, tag: String, msg: String) {
     println!("[FRONTEND-{}] [{}] {}", level.to_uppercase(), tag, msg);
 }
 
+#[tauri::command]
+fn capture_full_screen() -> Result<String, String> {
+    use base64::Engine;
+    let screens = screenshots::Screen::all().map_err(|e| format!("未找到可用显示器: {}", e))?;
+    if screens.is_empty() {
+        return Err("未检测到显示器设备".to_string());
+    }
+
+    let screen = screens.into_iter().find(|s| s.display_info.is_primary).unwrap_or_else(|| {
+        screenshots::Screen::all().unwrap().remove(0)
+    });
+
+    let image = screen.capture().map_err(|e| format!("原生截图捕获失败: {}", e))?;
+    let png_bytes = image.to_png().map_err(|e| format!("图片编码 PNG 失败: {}", e))?;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&png_bytes);
+    Ok(b64)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let migrations = vec![Migration {
@@ -21,7 +39,7 @@ pub fn run() {
     }];
 
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![log_to_terminal])
+        .invoke_handler(tauri::generate_handler![log_to_terminal, capture_full_screen])
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())

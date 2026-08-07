@@ -21,6 +21,8 @@ const working = ref(false)
 const start = ref({ x: 0, y: 0 })
 const box = ref({ x: 0, y: 0, w: 0, h: 0 })
 const imgNatural = ref({ w: 0, h: 0 })
+const winWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1920)
+const winHeight = ref(typeof window !== 'undefined' ? window.innerHeight : 1080)
 const screenshot = ref('')
 
 import { isTauri } from '@/platform/desktop'
@@ -142,6 +144,10 @@ async function recognize() {
 
 function onKey(e: KeyboardEvent) {
   if (e.key === 'Escape') closeWin()
+  if (e.key === 'Enter' && box.value.w > 10 && box.value.h > 10 && !working.value) {
+    done.value = true
+    recognize()
+  }
 }
 
 async function closeWin() {
@@ -166,20 +172,57 @@ async function closeWin() {
       draggable="false"
       @load="imgNatural = { w: ($event.target as HTMLImageElement).naturalWidth, h: ($event.target as HTMLImageElement).naturalHeight }"
     />
+    <!-- 微信级半透明遮罩层 -->
+    <div class="cap-mask-bg" v-if="box.w === 0 && !working" />
+
+    <!-- 微信选区框 -->
     <div
       v-if="box.w > 0"
       class="cap-box"
       :style="{ left: box.x + 'px', top: box.y + 'px', width: box.w + 'px', height: box.h + 'px' }"
-    />
-    <div class="cap-dim" v-if="box.w > 0" :style="{ left: box.x + 'px', top: Math.max(0, box.y - 26) + 'px' }">
-      {{ Math.round(box.w) }} × {{ Math.round(box.h) }}
+    >
+      <!-- 8 个控制把手点 -->
+      <span class="handle handle-tl"></span>
+      <span class="handle handle-tc"></span>
+      <span class="handle handle-tr"></span>
+      <span class="handle handle-rc"></span>
+      <span class="handle handle-br"></span>
+      <span class="handle handle-bc"></span>
+      <span class="handle handle-bl"></span>
+      <span class="handle handle-lc"></span>
     </div>
-    <div class="cap-hint" v-if="!working">
-      拖拽框选识别区域 · Esc 取消
+
+    <!-- 尺寸与坐标标注 -->
+    <div class="cap-dim" v-if="box.w > 0" :style="{ left: box.x + 'px', top: Math.max(8, box.y - 28) + 'px' }">
+      {{ Math.round(box.w) }} × {{ Math.round(box.h) }} px
     </div>
+
+    <!-- 微信级 浮动工具栏 -->
+    <div
+      v-if="box.w > 20 && !working"
+      class="cap-toolbar"
+      :style="{
+        left: Math.min(winWidth - 220, Math.max(10, box.x + box.w - 200)) + 'px',
+        top: (box.y + box.h + 40 > winHeight ? box.y - 42 : box.y + box.h + 8) + 'px'
+      }"
+    >
+      <button class="tb-btn primary" type="button" @click.stop="recognize" title="按 Enter 或点击识别选区内容">
+        ⚡ 识别坐标
+      </button>
+      <button class="tb-btn cancel" type="button" @click.stop="closeWin" title="按 Esc 取消">
+        ✕
+      </button>
+    </div>
+
+    <!-- 底部操作提示 -->
+    <div class="cap-hint" v-if="!working && box.w === 0">
+      🖱️ 按住鼠标左键拖拽框选梦幻西游坐标区域 · Esc 取消
+    </div>
+
+    <!-- 加载中 -->
     <div class="cap-loading" v-if="working">
       <div class="cap-spinner">⚡</div>
-      <span>正在 OCR 识别中...</span>
+      <span>微信级百度高精度 OCR 识别中...</span>
     </div>
   </div>
 </template>
@@ -191,6 +234,7 @@ html, body, #app {
   background: transparent !important;
   overflow: hidden !important;
   cursor: crosshair;
+  user-select: none;
 }
 </style>
 
@@ -199,43 +243,139 @@ html, body, #app {
   position: fixed;
   inset: 0;
   overflow: hidden;
+  outline: none;
 }
 .cap-img {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  /* 全屏 1:1 显示（窗口=屏幕尺寸），不缩放不裁切 */
   object-fit: fill;
+  pointer-events: none;
+}
+.cap-mask-bg {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.25);
   pointer-events: none;
 }
 .cap-box {
   position: fixed;
-  border: 2px solid var(--accent);
-  background: rgba(59, 130, 246, 0.15);
-  pointer-events: none;
-}
-.cap-dim {
-  position: fixed;
-  padding: 2px 8px;
-  background: rgba(0, 0, 0, 0.7);
-  color: #fff;
-  font-size: 12px;
-  border-radius: 4px;
+  border: 2px solid #0052d9;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4);
   pointer-events: none;
   z-index: 10;
 }
+/* 把手点 */
+.handle {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  background: #0052d9;
+  border: 1px solid #fff;
+  border-radius: 50%;
+}
+.handle-tl { top: -4px; left: -4px; }
+.handle-tc { top: -4px; left: 50%; transform: translateX(-50%); }
+.handle-tr { top: -4px; right: -4px; }
+.handle-rc { top: 50%; right: -4px; transform: translateY(-50%); }
+.handle-br { bottom: -4px; right: -4px; }
+.handle-bc { bottom: -4px; left: 50%; transform: translateX(-50%); }
+.handle-bl { bottom: -4px; left: -4px; }
+.handle-lc { top: 50%; left: -4px; transform: translateY(-50%); }
+
+.cap-dim {
+  position: fixed;
+  padding: 3px 8px;
+  background: rgba(0, 0, 0, 0.85);
+  color: #38bdf8;
+  font-size: 11px;
+  font-family: monospace;
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 12;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+
+.cap-toolbar {
+  position: fixed;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: #ffffff;
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  z-index: 100;
+  pointer-events: auto;
+}
+.tb-btn {
+  border: none;
+  outline: none;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.tb-btn.primary {
+  background: #0052d9;
+  color: #ffffff;
+}
+.tb-btn.primary:hover {
+  background: #003bb3;
+}
+.tb-btn.cancel {
+  background: #f3f4f6;
+  color: #4b5563;
+  padding: 5px 8px;
+}
+.tb-btn.cancel:hover {
+  background: #fee2e2;
+  color: #ef4444;
+}
+
 .cap-hint {
   position: fixed;
   left: 50%;
-  bottom: 30px;
+  bottom: 40px;
   transform: translateX(-50%);
-  padding: 8px 18px;
-  background: rgba(0, 0, 0, 0.7);
-  color: #fff;
+  padding: 9px 20px;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(8px);
+  color: #f8fafc;
   font-size: 13px;
   border-radius: 8px;
   pointer-events: none;
   z-index: 10;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.cap-loading {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 24px;
+  background: rgba(15, 23, 42, 0.9);
+  color: #38bdf8;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  z-index: 200;
+}
+.cap-spinner {
+  animation: pulse 1s infinite alternate;
+  font-size: 18px;
+}
+@keyframes pulse {
+  from { opacity: 0.4; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1.1); }
 }
 </style>

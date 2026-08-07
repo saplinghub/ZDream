@@ -29,6 +29,24 @@ function detectPlatform(): 'windows' | 'macos' | 'other' {
 export async function captureScreen(): Promise<CaptureResult> {
   const platform = detectPlatform()
   logger.info('capture', `开始截图, 检测到平台: ${platform}`)
+
+  // 1. 优先尝试 Rust 原生极速截图 (微信级 5ms 毫秒截屏)
+  try {
+    const { isTauri } = await import('@/platform/desktop')
+    if (isTauri()) {
+      const { invoke } = await import('@tauri-apps/api/core')
+      logger.info('capture', '尝试调用 Rust 原生极速截图 (capture_full_screen)...')
+      const base64 = await invoke<string>('capture_full_screen')
+      if (base64 && base64.length > 100) {
+        logger.info('capture', `⚡ Rust 原生截图成功！base64 长度: ${base64.length}`)
+        return { base64, filePath: '' }
+      }
+    }
+  } catch (nativeErr) {
+    logger.warn('capture', 'Rust 原生截图降级至系统 Command 驱动', nativeErr)
+  }
+
+  // 2. 降级方案：系统命令行驱动
   const tmp = await getTmpPath('zdream-shot')
   let filePath = ''
 
@@ -94,6 +112,7 @@ async function fileToBase64(filePath: string): Promise<string> {
 
 /** 删除临时文件 */
 export async function cleanupCapture(filePath: string): Promise<void> {
+  if (!filePath) return
   try {
     logger.info('capture', `清理临时截图文件: ${filePath}`)
     const { remove } = await import('@tauri-apps/plugin-fs')
