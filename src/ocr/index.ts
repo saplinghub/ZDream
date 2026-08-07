@@ -12,7 +12,7 @@ export type { OcrConfig, OcrResult, OcrWord } from './types'
 export async function ocrScreen(config: OcrConfig): Promise<OcrResult> {
   const shot = await captureScreen()
   try {
-    const result = await recognizeImage(shot.base64, config)
+    const result = await recognizeImage(shot.base64 ?? '', config)
     return result
   } finally {
     await cleanupCapture(shot.filePath)

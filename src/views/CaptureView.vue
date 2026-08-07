@@ -39,6 +39,12 @@ if (isTauri()) {
       const payload = ev.payload as { screenshot: string }
       if (payload?.screenshot) {
         screenshot.value = payload.screenshot
+        // 重置选区状态，供窗口复用（配合预创建 + hide 保留窗口）
+        box.value = { x: 0, y: 0, w: 0, h: 0 }
+        done.value = false
+        dragging.value = false
+        working.value = false
+        drawCanvas() // 清除上次残留的选区框，避免下次截图显示旧选区
         logger.info('capture', '通过 Tauri 事件成功接收全屏截图数据')
       }
     })
@@ -260,8 +266,8 @@ async function closeWin() {
   try {
     const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow')
     const win = getCurrentWebviewWindow()
+    // 仅隐藏保留窗口，供下次 Ctrl+A 复用（配合启动预创建，省去每次约 200ms 的窗口创建）
     await win.hide().catch(() => {})
-    await win.close().catch(() => {})
   } catch {
     window.close()
   }

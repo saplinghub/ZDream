@@ -38,11 +38,9 @@ export async function runOcrCapture(): Promise<void> {
     const t1 = performance.now()
     const shot = await captureScreen()
     const t2 = performance.now()
-    logger.info('ocr', `⏱️ [T1 -> T2] captureScreen 完成 | 耗时: ${(t2 - t1).toFixed(1)}ms | base64长度: ${shot.base64.length}`)
+    logger.info('ocr', `⏱️ [T1 -> T2] captureScreen 完成 | 耗时: ${(t2 - t1).toFixed(1)}ms | 图片源: ${shot.imageUrl.slice(0, 40)}`)
 
-    const dataUrl = (shot.base64.startsWith('data:') || shot.base64.startsWith('http') || shot.base64.startsWith('asset:'))
-      ? shot.base64
-      : `data:image/png;base64,${shot.base64}`
+    const dataUrl = shot.imageUrl // 已是可直接显示的 asset URL 或 data URL
     ocrStore.screenshot = dataUrl
 
     const t3 = performance.now()

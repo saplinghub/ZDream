@@ -1,8 +1,10 @@
 import { logger } from '@/utils/logger'
 
 export interface CaptureResult {
-  /** base64（无 data: 前缀），供 OCR 使用 */
-  base64: string
+  /** 可直接显示的图片地址（asset URL 或 data URL），供 <img>/Canvas 使用 */
+  imageUrl: string
+  /** 不含 data: 前缀的 base64（系统命令降级路径有值；Rust 原生路径为空串，裁剪走 crop_screen_region） */
+  base64?: string
   /** 临时文件路径 */
   filePath: string
 }
@@ -41,10 +43,10 @@ export async function captureScreen(): Promise<CaptureResult> {
         if (result.startsWith('/') || result.includes(':\\') || result.includes('zdream')) {
           const fileSrc = convertFileSrc(result)
           logger.info('capture', `⚡ Rust 原生截图无损保存路径: ${result} | Asset URL: ${fileSrc}`)
-          return { base64: fileSrc, filePath: result }
+          return { imageUrl: fileSrc, base64: '', filePath: result }
         }
         logger.info('capture', `⚡ Rust 原生截图成功！数据长度: ${result.length}`)
-        return { base64: result, filePath: '' }
+        return { imageUrl: result, base64: result, filePath: '' }
       }
     }
   } catch (nativeErr) {
@@ -84,7 +86,7 @@ export async function captureScreen(): Promise<CaptureResult> {
   logger.info('capture', `截图文件生成成功，读取并转 base64: ${filePath}`)
   const base64 = await fileToBase64(filePath)
   logger.info('capture', `转 base64 完成, 长度: ${base64.length}`)
-  return { base64, filePath }
+  return { imageUrl: `data:image/png;base64,${base64}`, base64, filePath }
 }
 
 /** 临时文件路径（生成随机名并确保目录存在） */

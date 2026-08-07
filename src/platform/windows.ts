@@ -84,6 +84,42 @@ export async function showMainWindow(): Promise<void> {
 // ── 全屏截图选区窗口 ──
 export const CAPTURE_WINDOW = 'capture'
 
+/** 启动时预创建隐藏的截图窗口，Ctrl+A 时 openCaptureWindow 只需 show，省去窗口创建耗时 */
+export async function precreateCaptureWindow(): Promise<void> {
+  if (!isTauri()) return
+  try {
+    const { getAllWebviewWindows, WebviewWindow } = await import('@tauri-apps/api/webviewWindow')
+    const { currentMonitor, primaryMonitor } = await import('@tauri-apps/api/window')
+    const all = await getAllWebviewWindows()
+    if (all.some((w: { label: string }) => w.label === CAPTURE_WINDOW)) return
+    const monitor = (await currentMonitor()) || (await primaryMonitor())
+    const factor = monitor?.scaleFactor || 1
+    const width = monitor ? Math.round(monitor.size.width / factor) : 1920
+    const height = monitor ? Math.round(monitor.size.height / factor) : 1080
+    const w = new WebviewWindow(CAPTURE_WINDOW, {
+      url: floatUrl('/capture'),
+      title: '截图',
+      x: 0,
+      y: 0,
+      width,
+      height,
+      decorations: false,
+      transparent: true,
+      shadow: false,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      acceptFirstMouse: true,
+      visible: false, // 隐藏预创建，首次 Ctrl+A 时 openCaptureWindow 直接 show
+    })
+    await new Promise<void>((resolve, reject) => {
+      w.once('tauri://created', () => resolve())
+      w.once('tauri://error', (e: unknown) => reject(e))
+    })
+  } catch (e) {
+    console.error('[windows] precreateCaptureWindow failed:', e)
+  }
+}
+
 /** 打开全屏透明遮罩窗口（屏幕直接划区域截图） */
 export async function openCaptureWindow(): Promise<void> {
   if (!isTauri()) return

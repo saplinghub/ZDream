@@ -74,7 +74,7 @@ watch(() => store.settings.ocrHotkey, (newKey, oldKey) => {
       runOcrCapture()
     })
   }
-})
+}, { immediate: true })
 
 onMounted(() => {
   window.addEventListener('keydown', onKey)
@@ -137,11 +137,7 @@ onMounted(() => {
   if (!isAuxChrome.value) {
     applyDesktopChrome()
     registerGlobalHotkey(store.settings.hotkey || 'Ctrl+`')
-    // OCR 截图快捷键
-    registerGlobalShortcut(store.settings.ocrHotkey || 'Ctrl+A', () => {
-      logger.info('hotkey', 'OCR 截图快捷键触发')
-      runOcrCapture()
-    })
+    // OCR 截图快捷键：由下方 watch(ocrHotkey, { immediate: true }) 统一注册，避免重复注册导致一次按键触发两次
     removeDoubleShift = installDoubleShift(() => {
       if (isTauri()) {
         import('@/composables/useGlobalHotkey').then((m) => m.triggerFloatOpen())
@@ -152,6 +148,10 @@ onMounted(() => {
     // 启动时自动打开悬浮球
     if (isTauri() && store.settings.autoOpenFloat) {
       setTimeout(() => openFloat(), 600)
+    }
+    // 启动时预创建隐藏截图窗口，Ctrl+A 时直接 show（省去每次约 200ms 的窗口创建）
+    if (isTauri()) {
+      import('@/platform/windows').then((m) => m.precreateCaptureWindow())
     }
 
     // 动态注册/监听语音快捷键

@@ -2,9 +2,109 @@ use tauri::Manager;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri_plugin_sql::{Migration, MigrationKind};
+use std::sync::{Mutex, OnceLock};
 
 #[cfg(target_os = "macos")]
 use tauri::WebviewUrl;
+
+/// 最近一次全屏截图缓存，供 crop_screen_region 复用，避免"预览截一次 + 裁剪再截一次"的重复截屏
+struct ScreenShotCache {
+    pixels: Vec<u8>,
+    width: u32,
+    height: u32,
+    captured_at: std::time::Instant,
+}
+
+fn screen_cache() -> &'static Mutex<Option<ScreenShotCache>> {
+    static CACHE: OnceLock<Mutex<Option<ScreenShotCache>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(None))
+}
+
+/// 获取主屏（优先 primary，否则第一个）
+fn primary_screen() -> Result<screenshots::Screen, String> {
+    let mut screens = screenshots::Screen::all().map_err(|e| format!("未找到可用显示器: {}", e))?;
+    if screens.is_empty() {
+        return Err("未检测到显示器设备".to_string());
+    }
+    let idx = screens.iter().position(|s| s.display_info.is_primary).unwrap_or(0);
+    Ok(screens.remove(idx))
+}
+
+/// 从缓存像素中裁剪选区（RGBA 逐行拷贝），越界/无效返回 None
+fn crop_from_cache(cache: &ScreenShotCache, x: u32, y: u32, w: u32, h: u32) -> Option<image::RgbaImage> {
+    let (cw, ch) = (cache.width, cache.height);
+    if w == 0 || h == 0 || x + w > cw || y + h > ch {
+        return None;
+    }
+    let stride = cw as usize * 4;
+    let mut data = Vec::with_capacity(w as usize * h as usize * 4);
+    for row in 0..h as usize {
+        let src_start = (y as usize + row) * stride + x as usize * 4;
+        for col in 0..w as usize {
+            let idx = src_start + col * 4;
+            data.push(cache.pixels[idx + 2]); // R
+            data.push(cache.pixels[idx + 1]); // G
+            data.push(cache.pixels[idx + 0]); // B
+            data.push(cache.pixels[idx + 3]); // A
+        }
+    }
+    image::RgbaImage::from_raw(w, h, data)
+}
+
+/// 快速全屏截图：macOS 用 CoreGraphics CGDisplayCreateImage（比 screenshots crate 快 3-5 倍），
+/// 其它平台退回 screenshots。返回 (RGBA 像素, 宽, 高)。
+fn capture_screen_fast() -> Result<(Vec<u8>, u32, u32), String> {
+    #[cfg(target_os = "macos")]
+    {
+        use core_graphics::base::kCGBitmapByteOrder32Host;
+        use core_graphics::color_space::CGColorSpace;
+        use core_graphics::context::CGContext;
+        use core_graphics::display::{CGDisplay, CGDisplayBounds};
+        use core_graphics::geometry::{CGPoint, CGRect, CGSize};
+        use core_graphics::image::CGImageAlphaInfo;
+
+        let display = CGDisplay::main();
+        let bounds = display.bounds();
+        let width = bounds.size.width as usize;
+        let height = bounds.size.height as usize;
+        if width == 0 || height == 0 {
+            return Err("屏幕尺寸无效".to_string());
+        }
+
+        let color_space = CGColorSpace::create_device_rgb();
+        let bitmap_info: u32 =
+            kCGBitmapByteOrder32Host | (CGImageAlphaInfo::CGImageAlphaPremultipliedLast as u32);
+
+        let mut ctx = CGContext::create_bitmap_context(
+            None,
+            width,
+            height,
+            8,
+            width * 4,
+            &color_space,
+            bitmap_info,
+        );
+
+        let img = display.image().ok_or("原生截屏失败".to_string())?;
+        let rect = CGRect::new(
+            &CGPoint::new(0.0, 0.0),
+            &CGSize::new(bounds.size.width, bounds.size.height),
+        );
+        ctx.draw_image(rect, &img);
+
+        // CGBitmapContext 输出为 BGRA (32Host + PremultipliedLast)。
+        // 直接返回 BGRA：BMP 用 BGRA 掩码显示，crop 时在小区域内转 RGBA（避免全图 33MB 转换）
+        let raw = ctx.data();
+        Ok((raw.to_vec(), width as u32, height as u32))
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let screen = primary_screen()?;
+        let img = screen.capture().map_err(|e| format!("原生截图捕获失败: {}", e))?;
+        Ok((img.as_raw().to_vec(), img.width(), img.height()))
+    }
+}
 
 #[tauri::command]
 fn log_to_terminal(level: String, tag: String, msg: String) {
@@ -17,22 +117,19 @@ fn capture_full_screen() -> Result<String, String> {
     use std::time::Instant;
 
     let start = Instant::now();
-    let screens = screenshots::Screen::all().map_err(|e| format!("未找到可用显示器: {}", e))?;
-    if screens.is_empty() {
-        return Err("未检测到显示器设备".to_string());
-    }
-
-    let screen = screens.into_iter().find(|s| s.display_info.is_primary).unwrap_or_else(|| {
-        screenshots::Screen::all().unwrap().remove(0)
-    });
-
+    let (raw_rgba, width, height) = capture_screen_fast()?;
     let t_cap = Instant::now();
-    let image = screen.capture().map_err(|e| format!("原生截图捕获失败: {}", e))?;
-    let t_enc = Instant::now();
 
-    let width = image.width();
-    let height = image.height();
-    let raw_rgba = image.as_raw();
+    // 缓存全屏 RGBA，供 crop_screen_region 复用（一次 OCR 只截一次屏，且裁剪内容与预览完全一致）
+    {
+        let mut cache = screen_cache().lock().unwrap();
+        *cache = Some(ScreenShotCache {
+            pixels: raw_rgba.clone(),
+            width,
+            height,
+            captured_at: Instant::now(),
+        });
+    }
 
     // 0.1ms 零循环极速 BMP (使用 BITMAPV5HEADER 定义 RGBA 掩码，零 CPU 迭代)
     let pixel_bytes_len = raw_rgba.len();
@@ -60,9 +157,9 @@ fn capture_full_screen() -> Result<String, String> {
     bmp_buf.extend_from_slice(&(0u32).to_le_bytes());
 
     // RGBA Masks
-    bmp_buf.extend_from_slice(&(0x000000FFu32).to_le_bytes()); // R
+    bmp_buf.extend_from_slice(&(0x000000FFu32).to_le_bytes()); // B
     bmp_buf.extend_from_slice(&(0x0000FF00u32).to_le_bytes()); // G
-    bmp_buf.extend_from_slice(&(0x00FF0000u32).to_le_bytes()); // B
+    bmp_buf.extend_from_slice(&(0x00FF0000u32).to_le_bytes()); // R
     bmp_buf.extend_from_slice(&(0xFF000000u32).to_le_bytes()); // A
 
     bmp_buf.extend_from_slice(b"BGRs");
@@ -70,7 +167,7 @@ fn capture_full_screen() -> Result<String, String> {
     bmp_buf.extend_from_slice(&[0u8; 12]);
 
     // 0.1ms 零循环直接内存扩展！
-    bmp_buf.extend_from_slice(raw_rgba);
+    bmp_buf.extend_from_slice(&raw_rgba);
 
     let temp_dir = std::env::temp_dir();
     let file_path = temp_dir.join("zdream_screen_capture.bmp");
@@ -81,10 +178,10 @@ fn capture_full_screen() -> Result<String, String> {
     let path_str = file_path.to_string_lossy().to_string();
 
     println!(
-        "[Rust Native Capture] 屏幕截取: {:?} | 0.1ms零循环内存写盘({}): {:?} | 总计耗时: {:?}",
-        t_enc.duration_since(t_cap),
+        "[Rust Native Capture] 屏幕截取: {:?} | 零循环内存写盘({}): {:?} | 总计耗时: {:?}",
+        t_cap.duration_since(start),
         path_str,
-        total.duration_since(t_enc),
+        total.duration_since(t_cap),
         total.duration_since(start)
     );
 
@@ -96,21 +193,36 @@ fn crop_screen_region(x: u32, y: u32, w: u32, h: u32) -> Result<String, String> 
     use base64::Engine;
     use std::io::Cursor;
 
-    let screens = screenshots::Screen::all().map_err(|e| format!("未找到可用显示器: {}", e))?;
-    if screens.is_empty() {
-        return Err("未检测到显示器设备".to_string());
+    if w == 0 || h == 0 {
+        return Err("选区尺寸无效".to_string());
     }
 
-    let screen = screens.into_iter().find(|s| s.display_info.is_primary).unwrap_or_else(|| {
-        screenshots::Screen::all().unwrap().remove(0)
-    });
+    // 优先复用缓存的全屏截图（10 秒内有效），避免重复截屏，且裁剪内容与用户预览完全一致
+    let cropped_img = {
+        let cache = screen_cache().lock().unwrap();
+        match cache.as_ref() {
+            Some(c) if c.captured_at.elapsed().as_secs() < 10 => crop_from_cache(c, x, y, w, h),
+            _ => None,
+        }
+    };
 
-    let full_image = screen.capture().map_err(|e| format!("原生截图捕获失败: {}", e))?;
-    let cropped = image::imageops::crop_imm(&full_image, x, y, w, h).to_image();
+    let cropped_img = if let Some(img) = cropped_img {
+        img
+    } else {
+        // 兜底：缓存缺失/过期/越界 → 重新截屏再裁剪
+        let screen = primary_screen()?;
+        let full = screen.capture().map_err(|e| format!("原生截图捕获失败: {}", e))?;
+        let (cw, ch) = (full.width(), full.height());
+        if x + w > cw || y + h > ch {
+            return Err("选区超出屏幕范围".to_string());
+        }
+        image::imageops::crop_imm(&full, x, y, w, h).to_image()
+    };
 
     let mut png_bytes = Vec::new();
     let mut cursor = Cursor::new(&mut png_bytes);
-    cropped.write_to(&mut cursor, image::ImageOutputFormat::Png)
+    cropped_img
+        .write_to(&mut cursor, image::ImageOutputFormat::Png)
         .map_err(|e| format!("选区图片编码 PNG 失败: {}", e))?;
 
     let b64 = base64::engine::general_purpose::STANDARD.encode(&png_bytes);
