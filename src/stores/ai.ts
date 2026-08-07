@@ -77,17 +77,22 @@ export const PRESETS: Record<AiProvider, { name: string; baseUrl: string; model:
 
 export const ASR_PRESETS = [
   {
-    name: '千问 ASR (qwen-audio-3.0-asr-flash)',
+    name: '通义千问 ASR (qwen-audio-3.0-asr-flash 兼容模式)',
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     model: 'qwen-audio-3.0-asr-flash',
   },
   {
-    name: '千问 ASR (qwen3-asr-flash)',
+    name: '通义千问 ASR (qwen3-asr-flash 兼容模式)',
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     model: 'qwen3-asr-flash',
   },
   {
-    name: '硅基流动 (SenseVoice/Qwen)',
+    name: '通义千问 ASR (DashScope 原生服务)',
+    baseUrl: 'https://dashscope.aliyuncs.com/api/v1/services/audio/asr/transcription',
+    model: 'qwen-audio-3.0-asr-flash',
+  },
+  {
+    name: '硅基流动 SenseVoice (Qwen 生态)',
     baseUrl: 'https://api.siliconflow.cn/v1',
     model: 'FunAudioLLM/SenseVoiceSmall',
   },
@@ -375,57 +380,123 @@ ${contextInstruction}
       throw new Error(err)
     }
 
-    try {
-      let url = `${targetBaseUrl}/audio/transcriptions`
-      if (targetBaseUrl.includes('dashscope.aliyuncs.com') && !targetBaseUrl.includes('compatible-mode')) {
-        url = 'https://dashscope.aliyuncs.com/api/v1/services/audio/asr/transcription'
+    // 候选 URL 列表（支持 DashScope 兼容模式、Native 模式与 SiliconFlow）
+    const urlsToTry: string[] = []
+    if (targetBaseUrl.includes('/services/audio/asr/transcription')) {
+      urlsToTry.push(targetBaseUrl)
+    } else {
+      urlsToTry.push(`${targetBaseUrl}/audio/transcriptions`)
+      if (targetBaseUrl.includes('dashscope.aliyuncs.com')) {
+        urlsToTry.push('https://dashscope.aliyuncs.com/api/v1/services/audio/asr/transcription')
       }
-      logger.info('ai', `正在发送语音 Blob (${audioBlob.size} 字节) 到 ASR 接口 [${url}] (模型: ${targetModel})...`)
-
-      const formData = new FormData()
-      formData.append('file', audioBlob, 'voice.webm')
-      formData.append('model', targetModel)
-
-      const headers: Record<string, string> = {}
-      if (targetApiKey) {
-        headers['Authorization'] = `Bearer ${targetApiKey}`
-      }
-      if (targetBaseUrl.includes('dashscope')) {
-        headers['X-DashScope-Async'] = 'enable'
-      }
-
-      let res: Response
-      if (isTauri()) {
-        const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http')
-        res = (await tauriFetch(url, {
-          method: 'POST',
-          headers,
-          body: formData,
-          connectTimeout: 30000,
-        })) as unknown as Response
-      } else {
-        res = await fetch(url, {
-          method: 'POST',
-          headers,
-          body: formData,
-        })
-      }
-
-      if (!res.ok) {
-        const errText = await res.text()
-        const errMsg = `ASR 识别失败 HTTP ${res.status}: ${errText.slice(0, 150)}`
-        logger.error('ai', errMsg)
-        throw new Error(errMsg)
-      }
-
-      const data = (await res.json()) as { text?: string; result?: string; transcript?: string }
-      const text = (data.text || data.result || data.transcript || '').trim()
-      logger.info('ai', `🎙️ 语音转写成功结果 (模型: ${targetModel}): "${text}"`)
-      return text
-    } catch (e) {
-      logger.error('ai', 'Whisper 语音转写报错', e)
-      return ''
     }
+
+    let lastErr = ''
+    for (const url of urlsToTry) {
+      try {
+        logger.info('ai', `正在发送语音 Blob (${audioBlob.size} 字节) 到 ASR 接口 [${url}] (模型: ${targetModel})...`)
+
+        const formData = new FormData()
+        formData.append('file', audioBlob, 'voice.wav')
+        formData.append('model', targetModel)
+
+        const headers: Record<string, string> = {}
+        if (targetApiKey) {
+          headers['Authorization'] = `Bearer ${targetApiKey}`
+        }
+        if (url.includes('dashscope')) {
+          headers['X-DashScope-Async'] = 'enable'
+        }
+
+        let res: Response
+        if (isTauri()) {
+          const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http')
+          res = (await tauriFetch(url, {
+            method: 'POST',
+            headers,
+            body: formData,
+            connectTimeout: 30000,
+          })) as unknown as Response
+        } else {
+          res = await fetch(url, {
+            method: 'POST',
+            headers,
+            body: formData,
+          })
+        }
+
+        if (!res.ok) {
+          const errText = await res.text()
+          lastErr = `ASR 识别失败 HTTP ${res.status}: ${errText.slice(0, 150)}`
+          logger.warn('ai', `${lastErr} (尝试下一端点...)`)
+          continue
+        }
+
+        const data = (await res.json()) as {
+          text?: string
+          result?: string
+          transcript?: string
+          output?: {
+            text?: string
+            task_id?: string
+            task_status?: string
+            results?: Array<{ text?: string; transcription_url?: string }>
+          }
+        }
+
+        // 自动支持 DashScope 异步 Task 轮询
+        if (data.output?.task_id) {
+          const taskId = data.output.task_id
+          logger.info('ai', `通义千问 ASR 提交异步任务成功 (Task ID: ${taskId})，正在轮询获取转写结果...`)
+          const taskUrl = `https://dashscope.aliyuncs.com/api/v1/tasks/${taskId}`
+          for (let i = 0; i < 15; i++) {
+            await new Promise((r) => setTimeout(r, 800))
+            let taskRes: Response
+            if (isTauri()) {
+              const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http')
+              taskRes = (await tauriFetch(taskUrl, { headers })) as unknown as Response
+            } else {
+              taskRes = await fetch(taskUrl, { headers })
+            }
+            if (taskRes.ok) {
+              const taskData = (await taskRes.json()) as {
+                output?: { task_status?: string; results?: Array<{ transcription_url?: string; text?: string }> }
+              }
+              if (taskData.output?.task_status === 'SUCCEEDED') {
+                const resUrl = taskData.output.results?.[0]?.transcription_url
+                if (resUrl) {
+                  const textRes = await fetch(resUrl)
+                  const textJson = await textRes.json()
+                  const extractedText = textJson.transcripts?.[0]?.text || ''
+                  logger.info('ai', `🎙️ 通义千问 ASR 异步转写成功: "${extractedText}"`)
+                  return extractedText.trim()
+                }
+                const extractedText = taskData.output.results?.[0]?.text || ''
+                logger.info('ai', `🎙️ 通义千问 ASR 异步转写成功: "${extractedText}"`)
+                return extractedText.trim()
+              }
+            }
+          }
+        }
+
+        const text = (
+          data.text ||
+          data.result ||
+          data.transcript ||
+          data.output?.text ||
+          data.output?.results?.[0]?.text ||
+          ''
+        ).trim()
+
+        logger.info('ai', `🎙️ 语音转写成功结果 (模型: ${targetModel}): "${text}"`)
+        return text
+      } catch (e) {
+        lastErr = e instanceof Error ? e.message : String(e)
+        logger.warn('ai', `请求 [${url}] 失败: ${lastErr}`)
+      }
+    }
+
+    throw new Error(lastErr || '所有 ASR 端点调用失败，请检查 Base URL 与 API Key')
   }
 
   /** 测试 ASR 语音识别 API 连通性与转写功能 */
