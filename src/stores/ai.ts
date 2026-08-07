@@ -75,6 +75,29 @@ export const PRESETS: Record<AiProvider, { name: string; baseUrl: string; model:
   },
 }
 
+export const ASR_PRESETS = [
+  {
+    name: '千问 ASR (qwen-audio-3.0-asr-flash)',
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    model: 'qwen-audio-3.0-asr-flash',
+  },
+  {
+    name: '千问 ASR (qwen3-asr-flash)',
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    model: 'qwen3-asr-flash',
+  },
+  {
+    name: '硅基流动 (SenseVoice/Qwen)',
+    baseUrl: 'https://api.siliconflow.cn/v1',
+    model: 'FunAudioLLM/SenseVoiceSmall',
+  },
+  {
+    name: 'OpenAI Whisper',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'whisper-1',
+  },
+]
+
 export const useAiStore = defineStore('ai', () => {
   const settings = ref<AiSettings>(loadJson(STORAGE_KEY, DEFAULT_SETTINGS))
   const testing = ref(false)
@@ -370,9 +393,9 @@ ${contextInstruction}
         return ''
       }
 
-      const data = (await res.json()) as { text?: string }
-      const text = data.text || ''
-      logger.info('ai', `🎙️ Whisper 转写成功结果: "${text}"`)
+      const data = (await res.json()) as { text?: string; result?: string; transcript?: string }
+      const text = (data.text || data.result || data.transcript || '').trim()
+      logger.info('ai', `🎙️ 语音转写成功结果 (模型: ${targetModel}): "${text}"`)
       return text
     } catch (e) {
       logger.error('ai', 'Whisper 语音转写报错', e)

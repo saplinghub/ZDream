@@ -15,7 +15,9 @@ fn log_to_terminal(level: String, tag: String, msg: String) {
 fn capture_full_screen() -> Result<String, String> {
     use base64::Engine;
     use std::io::Cursor;
+    use std::time::Instant;
 
+    let start = Instant::now();
     let screens = screenshots::Screen::all().map_err(|e| format!("未找到可用显示器: {}", e))?;
     if screens.is_empty() {
         return Err("未检测到显示器设备".to_string());
@@ -25,13 +27,27 @@ fn capture_full_screen() -> Result<String, String> {
         screenshots::Screen::all().unwrap().remove(0)
     });
 
+    let t_cap = Instant::now();
     let image = screen.capture().map_err(|e| format!("原生截图捕获失败: {}", e))?;
+    let t_enc = Instant::now();
+
     let mut jpg_bytes = Vec::new();
     let mut cursor = Cursor::new(&mut jpg_bytes);
     image.write_to(&mut cursor, image::ImageOutputFormat::Jpeg(85))
         .map_err(|e| format!("全屏图片编码 Jpeg 失败: {}", e))?;
 
+    let t_b64 = Instant::now();
     let b64 = base64::engine::general_purpose::STANDARD.encode(&jpg_bytes);
+    let total = Instant::now();
+
+    println!(
+        "[Rust Native Capture] 屏幕截取: {:?} | Jpeg编码(85): {:?} | Base64编码: {:?} | 总计耗时: {:?}",
+        t_enc.duration_since(t_cap),
+        t_b64.duration_since(t_enc),
+        total.duration_since(t_b64),
+        total.duration_since(start)
+    );
+
     Ok(b64)
 }
 

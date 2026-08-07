@@ -7,7 +7,7 @@ import { useUpdateChecker } from '@/composables/useUpdateChecker'
 import { useOcrStore } from '@/stores/ocr'
 import { runOcrCapture } from '@/ocr/runner'
 import HotkeyRecorder from '@/components/ui/HotkeyRecorder.vue'
-import { PRESETS, useAiStore, type AiProvider } from '@/stores/ai'
+import { PRESETS, ASR_PRESETS, useAiStore, type AiProvider } from '@/stores/ai'
 
 const store = useAppStore()
 const ocr = useOcrStore()
@@ -459,29 +459,52 @@ const activeTab = ref<'shortcut' | 'appearance' | 'ai' | 'advanced'>('shortcut')
           配置 AI 后，按 <b>Ctrl+A</b> 选区截图识别时将自动进行意图分析并展现预览确认卡片。Key 只存本地 SQLite / localStorage。
         </div>
 
-        <!-- Whisper 独立语音转写端点配置 -->
+        <!-- Whisper / 千问 语音转写端点配置 -->
         <div style="margin-top: 14px; border-top: 1px dashed var(--border); padding-top: 12px">
-          <h4 style="margin-bottom: 8px">🎙️ 语音转写 API (Whisper 独立端点)</h4>
-          <div class="field" style="margin-bottom: 8px">
-            <label>Whisper API Base URL</label>
-            <input
-              v-model="ai.settings.whisperBaseUrl"
-              class="input"
-              placeholder="默认 https://api.openai.com/v1 或 https://api.siliconflow.cn/v1"
-            />
-            <div class="meta" style="font-size: 11px">
-              如主模型使用 DeepSeek / Kimi / Ollama 等纯文本大模型（不含 /audio/transcriptions 接口），可在此填入支持 Whisper 的端点（如 硅基流动 SiliconFlow、Groq、OpenAI 或本地 Whisper 服务）。
+          <h4 style="margin-bottom: 8px">🎙️ 语音转写 API (千问 ASR / Whisper 端点)</h4>
+          <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px">
+            <button
+              v-for="p in ASR_PRESETS"
+              :key="p.name"
+              type="button"
+              class="btn text-btn sm-btn"
+              @click="ai.settings.whisperBaseUrl = p.baseUrl; ai.settings.whisperModel = p.model"
+            >
+              {{ p.name }}
+            </button>
+          </div>
+
+          <div class="grid-2" style="margin-bottom: 8px">
+            <div class="field">
+              <label>ASR API Base URL</label>
+              <input
+                v-model="ai.settings.whisperBaseUrl"
+                class="input"
+                placeholder="默认 https://dashscope.aliyuncs.com/compatible-mode/v1"
+              />
+            </div>
+            <div class="field">
+              <label>ASR 模型 ID (支持 qwen-audio-3.0-asr-flash)</label>
+              <input
+                v-model="ai.settings.whisperModel"
+                class="input"
+                placeholder="qwen-audio-3.0-asr-flash 或 qwen3-asr-flash 或 whisper-1"
+              />
             </div>
           </div>
+
           <div class="field">
-            <label>Whisper API Key (可选，不填则自动复用上方 API Key)</label>
+            <label>ASR API Key (可选，不填则自动复用主 AI Key)</label>
             <input
               v-model="ai.settings.whisperApiKey"
               type="password"
               class="input"
-              placeholder="留空自动使用主 AI Key"
+              placeholder="留空自动使用主 AI Key (如 DashScope / 阿里云 API Key)"
               autocomplete="off"
             />
+            <div class="meta" style="font-size: 11px; margin-top: 4px">
+              已全面支持通义千问 ASR 模型（如 <code>qwen-audio-3.0-asr-flash</code>、<code>qwen3-asr-flash</code>）与 OpenAI 兼容端点，音频文件转写自动解析响应。
+            </div>
           </div>
         </div>
       </div>
