@@ -31,17 +31,17 @@ fn capture_full_screen() -> Result<String, String> {
     let image = screen.capture().map_err(|e| format!("原生截图捕获失败: {}", e))?;
     let t_enc = Instant::now();
 
-    let mut jpg_bytes = Vec::new();
-    let mut cursor = Cursor::new(&mut jpg_bytes);
-    image.write_to(&mut cursor, image::ImageOutputFormat::Jpeg(85))
-        .map_err(|e| format!("全屏图片编码 Jpeg 失败: {}", e))?;
+    let mut bmp_bytes = Vec::new();
+    let mut cursor = Cursor::new(&mut bmp_bytes);
+    image.write_to(&mut cursor, image::ImageOutputFormat::Bmp)
+        .map_err(|e| format!("全屏图片编码 Bmp 失败: {}", e))?;
 
     let t_b64 = Instant::now();
-    let b64 = base64::engine::general_purpose::STANDARD.encode(&jpg_bytes);
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&bmp_bytes);
     let total = Instant::now();
 
     println!(
-        "[Rust Native Capture] 屏幕截取: {:?} | Jpeg编码(85): {:?} | Base64编码: {:?} | 总计耗时: {:?}",
+        "[Rust Native Capture] 屏幕截取: {:?} | Bmp 零压缩编码: {:?} | Base64编码: {:?} | 总计耗时: {:?}",
         t_enc.duration_since(t_cap),
         t_b64.duration_since(t_enc),
         total.duration_since(t_b64),

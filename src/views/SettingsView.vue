@@ -461,7 +461,26 @@ const activeTab = ref<'shortcut' | 'appearance' | 'ai' | 'advanced'>('shortcut')
 
         <!-- Whisper / 千问 语音转写端点配置 -->
         <div style="margin-top: 14px; border-top: 1px dashed var(--border); padding-top: 12px">
-          <h4 style="margin-bottom: 8px">🎙️ 语音转写 API (千问 ASR / Whisper 端点)</h4>
+          <div class="row-between" style="margin-bottom: 8px">
+            <h4 style="margin: 0">🎙️ 语音转写 API (千问 ASR / Whisper 端点)</h4>
+            <button
+              type="button"
+              class="btn primary-btn sm-btn"
+              :disabled="ai.testingAsr"
+              @click="ai.testAsrEndpoint()"
+            >
+              {{ ai.testingAsr ? '🧪 测试 ASR 中...' : '🧪 测试 ASR 语音识别 API' }}
+            </button>
+          </div>
+
+          <!-- ASR 测试状态告警 -->
+          <div v-if="ai.testAsrSuccess" class="alert success" style="margin-bottom: 10px; font-size: 12px">
+            {{ ai.testAsrSuccess }}
+          </div>
+          <div v-if="ai.testAsrError" class="alert danger" style="margin-bottom: 10px; font-size: 12px">
+            {{ ai.testAsrError }}
+          </div>
+
           <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px">
             <button
               v-for="p in ASR_PRESETS"

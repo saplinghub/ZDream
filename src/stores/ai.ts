@@ -346,20 +346,38 @@ ${contextInstruction}
     }
   }
 
-  /** AI 语音转文字 (Whisper API) */
+  const testingAsr = ref(false)
+  const testAsrError = ref('')
+  const testAsrSuccess = ref('')
+
+  /** AI 语音转文字 (Whisper / 千问 ASR API) */
   async function transcribeAudio(audioBlob: Blob): Promise<string> {
-    const targetBaseUrl = (settings.value.whisperBaseUrl || settings.value.baseUrl).replace(/\/$/, '')
-    const targetApiKey = settings.value.whisperApiKey || settings.value.apiKey
-    const targetModel = settings.value.whisperModel || 'whisper-1'
+    let targetBaseUrl = (settings.value.whisperBaseUrl || '').trim().replace(/\/$/, '')
+    let targetApiKey = (settings.value.whisperApiKey || '').trim()
+    const targetModel = (settings.value.whisperModel || 'qwen-audio-3.0-asr-flash').trim()
+
+    // 如果未填 whisperBaseUrl，智能规避纯文本 AI 接口（如 DeepSeek/Moonshot/Ollama），防止 404
+    if (!targetBaseUrl) {
+      const mainBase = (settings.value.baseUrl || '').replace(/\/$/, '')
+      if (mainBase && !mainBase.includes('deepseek') && !mainBase.includes('moonshot') && !mainBase.includes('11434')) {
+        targetBaseUrl = mainBase
+      } else {
+        targetBaseUrl = 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+      }
+    }
+    if (!targetApiKey) {
+      targetApiKey = (settings.value.apiKey || '').trim()
+    }
 
     if (!targetApiKey) {
-      logger.warn('ai', 'AI 与 Whisper 未配置 API Key，跳过云端 Whisper 语音识别')
-      return ''
+      const err = 'AI 与 ASR 未配置 API Key，请先在设置页填写 Key'
+      logger.warn('ai', err)
+      throw new Error(err)
     }
 
     try {
       const url = `${targetBaseUrl}/audio/transcriptions`
-      logger.info('ai', `正在发送语音 Blob (${audioBlob.size} 字节) 到 AI Whisper 接口 [${url}] (模型: ${targetModel})...`)
+      logger.info('ai', `正在发送语音 Blob (${audioBlob.size} 字节) 到 ASR 接口 [${url}] (模型: ${targetModel})...`)
 
       const formData = new FormData()
       formData.append('file', audioBlob, 'voice.webm')
@@ -389,8 +407,9 @@ ${contextInstruction}
 
       if (!res.ok) {
         const errText = await res.text()
-        logger.error('ai', `Whisper 识别失败 HTTP ${res.status}: ${errText.slice(0, 100)}`)
-        return ''
+        const errMsg = `ASR 识别失败 HTTP ${res.status}: ${errText.slice(0, 150)}`
+        logger.error('ai', errMsg)
+        throw new Error(errMsg)
       }
 
       const data = (await res.json()) as { text?: string; result?: string; transcript?: string }
@@ -403,11 +422,67 @@ ${contextInstruction}
     }
   }
 
+  /** 测试 ASR 语音识别 API 连通性与转写功能 */
+  async function testAsrEndpoint(): Promise<boolean> {
+    testingAsr.value = true
+    testAsrError.value = ''
+    testAsrSuccess.value = ''
+
+    try {
+      // 内存构建 1 秒标准的 PCM WAV 音频 (440Hz 提示音)
+      const sampleRate = 16000
+      const durationSec = 1
+      const numSamples = sampleRate * durationSec
+      const buffer = new ArrayBuffer(44 + numSamples * 2)
+      const view = new DataView(buffer)
+
+      const writeString = (offset: number, string: string) => {
+        for (let i = 0; i < string.length; i++) {
+          view.setUint8(offset + i, string.charCodeAt(i))
+        }
+      }
+      writeString(0, 'RIFF')
+      view.setUint32(4, 36 + numSamples * 2, true)
+      writeString(8, 'WAVE')
+      writeString(12, 'fmt ')
+      view.setUint32(16, 16, true)
+      view.setUint16(20, 1, true)
+      view.setUint16(22, 1, true)
+      view.setUint32(24, sampleRate, true)
+      view.setUint32(28, sampleRate * 2, true)
+      view.setUint16(32, 2, true)
+      view.setUint16(34, 16, true)
+      writeString(36, 'data')
+      view.setUint32(40, numSamples * 2, true)
+
+      for (let i = 0; i < numSamples; i++) {
+        const sample = Math.sin((i / sampleRate) * 440 * 2 * Math.PI) * 8000
+        view.setInt16(44 + i * 2, sample, true)
+      }
+
+      const testBlob = new Blob([buffer], { type: 'audio/wav' })
+      logger.info('ai', '🧪 开始测试 ASR API 连通性...')
+
+      const resultText = await transcribeAudio(testBlob)
+      testAsrSuccess.value = `ASR 识别 API 调通！接口返回 200 OK，识别文本: "${resultText || '(测试音转写为空，接口响应正常 200 OK)'}"`
+      return true
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      testAsrError.value = msg
+      return false
+    } finally {
+      testingAsr.value = false
+    }
+  }
+
   return {
     settings,
     testing,
     testError,
     testSuccess,
+    testingAsr,
+    testAsrError,
+    testAsrSuccess,
     fetchedModels,
     fetchingModels,
     fetchModelsError,
@@ -418,5 +493,6 @@ ${contextInstruction}
     testConnection,
     analyzeIntentAndExtract,
     transcribeAudio,
+    testAsrEndpoint,
   }
 })
