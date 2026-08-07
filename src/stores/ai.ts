@@ -350,13 +350,12 @@ ${contextInstruction}
   const testAsrError = ref('')
   const testAsrSuccess = ref('')
 
-  /** AI 语音转文字 (通义千问 Qwen-Audio 3.0 / Whisper API) */
+  /** AI 语音转文字 (通义千问 Qwen-Audio 3.0 短音频同步 API) */
   async function transcribeAudio(audioBlob: Blob): Promise<string> {
     let targetBaseUrl = (settings.value.whisperBaseUrl || '').trim().replace(/\/$/, '')
     let targetApiKey = (settings.value.whisperApiKey || '').trim()
     const targetModel = (settings.value.whisperModel || 'qwen-audio-3.0-asr-flash').trim()
 
-    // 如果未填 whisperBaseUrl，智能规避纯文本 AI 接口（如 DeepSeek/Moonshot/Ollama），防止 404
     if (!targetBaseUrl) {
       const mainBase = (settings.value.baseUrl || '').replace(/\/$/, '')
       if (mainBase && !mainBase.includes('deepseek') && !mainBase.includes('moonshot') && !mainBase.includes('11434')) {
@@ -375,11 +374,12 @@ ${contextInstruction}
       throw new Error(err)
     }
 
-    // 1. 通义千问 Qwen-Audio 3.0 官方 ASR 接口 (POST https://dashscope.aliyuncs.com/api/v1/services/audio/asr)
+    // 1. 通义千问 Qwen-Audio 3.0 短音频同步 POST 接口 (qwen-audio-3.0-asr-flash)
     if (targetBaseUrl.includes('dashscope.aliyuncs.com')) {
       const dashUrl = 'https://dashscope.aliyuncs.com/api/v1/services/audio/asr'
-      logger.info('ai', `正在调用通义千问 Qwen-Audio 3.0 官方 ASR 接口 [${dashUrl}] (模型: ${targetModel})...`)
+      logger.info('ai', `正在调用通义千问短音频同步 ASR 接口 [${dashUrl}] (模型: qwen-audio-3.0-asr-flash)...`)
 
+      // 音频 Blob 转 16kHz WAV Base64 Data URL
       const arrayBuffer = await audioBlob.arrayBuffer()
       const bytes = new Uint8Array(arrayBuffer)
       let binary = ''
@@ -391,11 +391,12 @@ ${contextInstruction}
       const dataUrl = `data:audio/wav;base64,${base64Audio}`
 
       const payload = {
-        task: 'asr',
-        function: 'transcription',
-        model: targetModel.includes('asr') ? targetModel : 'qwen-audio-3.0-asr-flash',
+        model: 'qwen-audio-3.0-asr-flash',
         input: {
-          file: dataUrl,
+          file_url: dataUrl,
+        },
+        parameters: {
+          sample_rate: 16000,
         },
       }
 
@@ -434,7 +435,7 @@ ${contextInstruction}
       }
 
       const text = (data.output?.transcription || data.output?.text || '').trim()
-      logger.info('ai', `🎙️ 通义千问 Qwen-Audio 3.0 识别成功结果: "${text}"`)
+      logger.info('ai', `🎙️ 通义千问 Qwen-Audio 3.0 短音频同步识别成功: "${text}"`)
       return text
     }
 
