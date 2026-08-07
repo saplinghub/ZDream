@@ -7,10 +7,13 @@ import { hydrateKeys } from '@/platform/desktop'
 import { allPrefixedStorageKeys } from '@/utils/storage'
 import { THEME_STORAGE_KEY } from '@/theme/themes'
 import { initActivities } from '@/activities'
+import { initVoice } from '@/voice'
 import { loadLogs } from '@/utils/logger'
 
 // 注册所有活动玩法（必须在 app 创建前）
 initActivities()
+// 初始化语音命令注册表（收集各活动声明的语音能力）
+initVoice()
 // 加载历史日志
 loadLogs()
 

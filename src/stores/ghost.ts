@@ -88,6 +88,60 @@ export function normalizeChineseNumbers(text: string): string {
   return result
 }
 
+/** 拆分单个连续数字串为坐标对 (X, Y)，按玩家说话习惯优先级，可选地图范围过滤 */
+function splitSingleRun(run: string, maxW?: number, maxH?: number): { x: number; y: number } | null {
+  const len = run.length
+  if (len < 3) return null
+  const candidates: Array<[number, number]> = []
+  if (len % 2 === 0) candidates.push([len / 2, len / 2])
+  if (len >= 4) candidates.push([3, len - 3], [len - 3, 3])
+  if (len === 3) candidates.push([2, 1], [1, 2])
+  for (const [xl, yl] of candidates) {
+    if (xl < 1 || yl < 1 || xl > 3 || yl > 3) continue
+    const xStr = run.slice(0, xl)
+    const yStr = run.slice(xl)
+    if (/^0\d/.test(xStr) || /^0\d/.test(yStr)) continue
+    const x = Number(xStr)
+    const y = Number(yStr)
+    if (x <= 0 || y <= 0) continue
+    if (maxW != null && x > maxW) continue
+    if (maxH != null && y > maxH) continue
+    return { x, y }
+  }
+  return null
+}
+
+/**
+ * 无分隔符连续数字坐标的智能拆分（ASR 常吞掉数字间的停顿，如 "12 21" 被识别成 "1221"）。
+ * 返回拆分结果及被拆分的原始数字串，供调用方定位替换。
+ */
+function trySplitCoordRun(text: string, maxW?: number, maxH?: number): { x: number; y: number; run: string } | null {
+  const runs = text.match(/\d{2,}/g) || []
+  for (const run of runs) {
+    const split = splitSingleRun(run, maxW, maxH)
+    if (split) return { ...split, run }
+  }
+  return null
+}
+
+/** 将文本中第一个 ≥4 位的连续数字串替换为 "X Y"（带空格），用于 UI 展示核验。返回 null 表示无可拆分项 */
+export function splitCoordRunForDisplay(text: string): { text: string; x: number; y: number } | null {
+  const runs = text.match(/\d{2,}/g) || []
+  for (const run of runs) {
+    if (run.length < 4) continue // 2-3 位独立数字不拆，避免误拆已有分隔的坐标 (如 "351 103")
+    const split = splitSingleRun(run)
+    if (!split) continue
+    const idx = text.indexOf(run)
+    if (idx < 0) continue
+    return {
+      text: text.slice(0, idx) + `${split.x} ${split.y}` + text.slice(idx + run.length),
+      x: split.x,
+      y: split.y,
+    }
+  }
+  return null
+}
+
 export const useGhostStore = defineStore('ghost', () => {
   const ringIndex = ref<number>(Number(localStorage.getItem(STORAGE_RING_KEY) || 1))
   const currentTask = ref<GhostTaskState | null>(null)
@@ -241,23 +295,7 @@ export const useGhostStore = defineStore('ghost', () => {
     // 3. 剥离 "第X个" / "第X环" 文本，防止环数数字干扰坐标 X/Y 提取
     const textForCoord = clean.replace(/第\s*\d{1,2}\s*[个环]/g, '')
 
-    // 4. 精准匹配坐标对 (例如 "351,103" 或 "351 103" 或 "351，103")
-    let posX = 0
-    let posY = 0
-
-    const pairMatch = textForCoord.match(/(\d{1,3})\s*[,，\s.]+\s*(\d{1,3})/)
-    if (pairMatch) {
-      posX = Number(pairMatch[1])
-      posY = Number(pairMatch[2])
-    } else {
-      const numMatches = textForCoord.match(/\d{1,3}/g)
-      if (numMatches && numMatches.length >= 2) {
-        posX = Number(numMatches[0])
-        posY = Number(numMatches[1])
-      }
-    }
-
-    // 4. 解析地图 (三重保障策略)
+    // 4. 解析地图 (三重保障策略) —— 提前到坐标解析前，用地图坐标范围约束坐标拆分
     let targetMap: GhostMapItem | null = null
 
     targetMap = findGhostMap(clean)
@@ -282,6 +320,31 @@ export const useGhostStore = defineStore('ghost', () => {
         if (m.aliases.some((a) => a.length >= 2 && clean.toLowerCase().includes(a.toLowerCase()))) {
           targetMap = m
           break
+        }
+      }
+    }
+
+    // 5. 精准匹配坐标对 (支持 "351,103" / "351 103" / 无分隔符 "351103" 智能拆分)
+    const maxW = targetMap?.maxWidth
+    const maxH = targetMap?.maxHeight
+    let posX = 0
+    let posY = 0
+
+    const pairMatch = textForCoord.match(/(\d{1,3})\s*[,，\s.]+\s*(\d{1,3})/)
+    if (pairMatch) {
+      posX = Number(pairMatch[1])
+      posY = Number(pairMatch[2])
+    } else {
+      // 无显式分隔符 (ASR 常吞掉数字间停顿)：智能拆分连续数字串，并用地图坐标范围过滤
+      const splitCoord = trySplitCoordRun(textForCoord, maxW, maxH)
+      if (splitCoord) {
+        posX = splitCoord.x
+        posY = splitCoord.y
+      } else {
+        const numMatches = textForCoord.match(/\d{1,3}/g)
+        if (numMatches && numMatches.length >= 2) {
+          posX = Number(numMatches[0])
+          posY = Number(numMatches[1])
         }
       }
     }

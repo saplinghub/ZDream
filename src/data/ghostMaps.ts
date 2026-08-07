@@ -31,7 +31,7 @@ export const GHOST_MAPS: GhostMapItem[] = [
   },
   {
     name: '建邺城',
-    aliases: ['jy', 'jianye', 'jycn', '建业城', 'jyc'],
+    aliases: ['jy', 'jianye', 'jycn', '建业城', '建业', '建邺', 'jyc'],
     routeGuide: '✈️ 飞行符直达建邺城（中心 110,75）/ 导标旗（衙门/海产店）',
     maxWidth: 280,
     maxHeight: 140,

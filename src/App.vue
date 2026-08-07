@@ -25,6 +25,7 @@ import {
 import { runOcrCapture } from '@/ocr/runner'
 import { useGhostStore } from '@/stores/ghost'
 import { useActivityStore } from '@/stores/activity'
+import { VOICE_PENDING_KEY } from '@/composables/useVoiceInput'
 
 const store = useAppStore()
 const ocrStore = useOcrStore()
@@ -162,6 +163,7 @@ onMounted(() => {
           if (isTauri()) {
             const { openFloat } = await import('@/platform/windows')
             await openFloat()
+            localStorage.setItem(VOICE_PENDING_KEY, '1') // 待收音标记：浮窗挂载后消费并直接收音
             const { emitTo } = await import('@tauri-apps/api/event')
             await emitTo('float', 'float:open-request', { toggle: false })
             await emitTo('float', 'voice:start', {})

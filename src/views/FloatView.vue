@@ -7,11 +7,12 @@ import { getActivity } from '@/activities/registry'
 import { showMainWindow } from '@/platform/windows'
 import { isTauri } from '@/platform/desktop'
 
-import { useVoiceInput } from '@/composables/useVoiceInput'
+import { useVoiceInput, VOICE_PENDING_KEY } from '@/composables/useVoiceInput'
+import { pendingConfirm, resolveConfirm } from '@/voice'
 
 const store = useAppStore()
 const activityStore = useActivityStore()
-const { voiceState, voiceText, voiceError } = useVoiceInput()
+const { voiceState, voiceText, voiceError, startListening } = useVoiceInput()
 const collapsed = ref(false)
 
 // ── 点击 vs 拖动（绝对定位 + 物理坐标统一 + 静态导入）──
@@ -68,11 +69,16 @@ onMounted(async () => {
       unlistenVoice = await listen('voice:start', () => {
         console.info('[FloatView] voice:start received')
         expandAndFocus()
-        store.toast('🎙️ 快捷键已唤出定位面板！点击【🎙️ 语音】大声说坐标')
+        startListening() // 全局快捷键：唤出并直接开始收音
       })
     } catch (e) {
       console.warn('[FloatView] listen float:open-request failed:', e)
     }
+  }
+  // 消费全局快捷键的待收音标记（浮窗刚创建时 voice:start 事件可能在挂载前丢失）
+  if (localStorage.getItem(VOICE_PENDING_KEY) === '1') {
+    localStorage.removeItem(VOICE_PENDING_KEY)
+    setTimeout(() => { startListening() }, 300)
   }
   if (!collapsed.value) {
     setTimeout(autoFocusInput, 300)
@@ -420,6 +426,13 @@ async function toggleCollapse() {
           <span class="warn-mark">⚠️</span>
           <span class="v-island-text">{{ voiceError || '未听到声音，按 Ctrl+2 重试' }}</span>
         </div>
+      </div>
+
+      <!-- 🧾 语音歧义确认条 -->
+      <div v-if="pendingConfirm" class="voice-confirm-bar">
+        <span class="vc-text">🧾 {{ pendingConfirm.summary }}</span>
+        <button class="vc-btn vc-ok" @click="resolveConfirm(true)">确认</button>
+        <button class="vc-btn vc-no" @click="resolveConfirm(false)">取消</button>
       </div>
 
       <div class="p-head" data-tauri-drag-region>
@@ -790,4 +803,19 @@ html, body, #app {
   0%, 100% { height: 4px; }
   50% { height: 14px; }
 }
+
+/* 🧾 语音歧义确认条 */
+.voice-confirm-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; font-size: 11px; font-weight: 600;
+  background: color-mix(in oklch, #f59e0b 14%, var(--surface));
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.vc-text { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vc-btn {
+  border: none; border-radius: 6px; padding: 3px 12px; font-size: 11px; font-weight: 700;
+  cursor: pointer; color: #fff;
+}
+.vc-ok { background: #16a34a; }
+.vc-no { background: #6b7280; }
 </style>

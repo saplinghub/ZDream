@@ -1,4 +1,5 @@
 import type { Component } from 'vue'
+import type { VoiceCapability } from '@/voice/types'
 
 /**
  * 玩法插件接口
@@ -26,4 +27,10 @@ export interface ActivityPlugin {
    * 返回 null 表示不显示摘要行。
    */
   summary?: () => string | null
+
+  /**
+   * 语音能力声明（可选）：本玩法支持的语音意图。
+   * 实现后 initVoice() 会自动收集注册，语音命令即可路由到该玩法。
+   */
+  readonly voice?: VoiceCapability
 }

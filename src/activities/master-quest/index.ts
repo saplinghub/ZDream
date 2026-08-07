@@ -7,4 +7,12 @@ export const masterQuestPlugin: ActivityPlugin = {
   icon: '🧙',
   ballText: '师',
   floatComponent: MasterQuestFloat,
+  voice: {
+    keywords: ['师门', 'sm'],
+    intents: [
+      { type: 'mq_start' },
+      { type: 'mq_end' },
+      { type: 'mq_pause' },
+    ],
+  },
 }

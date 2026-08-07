@@ -12,7 +12,7 @@ const appStore = useAppStore()
 const ghostStore = useGhostStore()
 const ocrStore = useOcrStore()
 const activityStore = useActivityStore()
-const { voiceState, voiceText, voiceError, audioVolume, startListening } = useVoiceInput()
+const { voiceState, voiceText, voiceError, audioVolume, startListening, stopListening } = useVoiceInput()
 
 const inputText = ref('')
 
@@ -47,6 +47,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (timerInterval) clearInterval(timerInterval)
+  stopListening() // 组件卸载时释放麦克风，避免权限一直占用
 })
 
 // 自动监听 OCR

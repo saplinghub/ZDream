@@ -469,7 +469,16 @@ const activeTab = ref<'shortcut' | 'appearance' | 'ai' | 'advanced'>('shortcut')
               :disabled="ai.testingAsr"
               @click="ai.testAsrEndpoint()"
             >
-              {{ ai.testingAsr ? '🧪 测试 ASR 中...' : '🧪 测试 ASR 语音识别 API' }}
+              {{ ai.testingAsr ? '🧪 测试 ASR 中...' : '🧪 快速连通测试' }}
+            </button>
+            <button
+              type="button"
+              class="btn primary-btn sm-btn"
+              :disabled="ai.testingAsr"
+              @click="ai.testAsrEndpoint(true)"
+              title="调起麦克风录 3 秒真实语音，直接验证转写效果"
+            >
+              {{ ai.testingAsr ? '🎤 测试中...' : '🎤 真实麦克风测试' }}
             </button>
           </div>
 
