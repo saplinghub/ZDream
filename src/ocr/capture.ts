@@ -38,17 +38,21 @@ export async function captureScreen(): Promise<CaptureResult> {
     await exec('screencapture', ['-x', '-t', 'png', filePath])
   } else if (platform === 'windows') {
     filePath = `${tmp}.png`
-    logger.info('capture', `Windows 执行 PowerShell 截图保存至: ${filePath}`)
-    // PowerShell 全屏截图
+    logger.info('capture', `Windows 执行 PowerShell (DPIAware + CaptureBlt + VirtualScreen) 截图保存至: ${filePath}`)
+    // PowerShell 全屏截图 (开启 DPI 感知 + CaptureBlt 强制抓取 Direct3D/OpenGL/DWM 硬件加速梦幻窗口 + 全多屏)
     const ps = `
       Add-Type -AssemblyName System.Windows.Forms;
       Add-Type -AssemblyName System.Drawing;
-      $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds;
-      $bmp = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height);
+      try {
+        $u = Add-Type -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetProcessDPIAware();' -Name "W32Dpi" -Namespace "W32" -PassThru;
+        $u::SetProcessDPIAware() | Out-Null;
+      } catch {};
+      $screen = [System.Windows.Forms.SystemInformation]::VirtualScreen;
+      $bmp = New-Object System.Drawing.Bitmap($screen.Width, $screen.Height);
       $g = [System.Drawing.Graphics]::FromImage($bmp);
-      $g.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size);
+      $g.CopyFromScreen($screen.Location, [System.Drawing.Point]::Empty, $screen.Size, [System.Drawing.CopyPixelOperation]::SourceCopy -bor [System.Drawing.CopyPixelOperation]::CaptureBlt);
       $bmp.Save('${filePath.replace(/\\/g, '\\\\')}');
-      $g.Dispose(); $bmp.Dispose()`
+      $g.Dispose(); $bmp.Dispose();`
     await exec('powershell', ['-NoProfile', '-Command', ps])
   } else {
     throw new Error('当前平台不支持截图')
