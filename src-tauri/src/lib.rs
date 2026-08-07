@@ -13,6 +13,7 @@ fn log_to_terminal(level: String, tag: String, msg: String) {
 
 #[tauri::command]
 fn capture_full_screen() -> Result<String, String> {
+    use std::io::Write;
     use std::time::Instant;
 
     let start = Instant::now();
@@ -29,21 +30,49 @@ fn capture_full_screen() -> Result<String, String> {
     let image = screen.capture().map_err(|e| format!("原生截图捕获失败: {}", e))?;
     let t_enc = Instant::now();
 
-    // 保存 100% 无损 1:1 物理像素 BMP 临时文件 (3ms 零 CPU 压缩写盘，高清零模糊)
+    let width = image.width();
+    let height = image.height();
+    let raw_rgba = image.as_raw();
+
+    // 向量化直接构造 32-bit Top-Down BMP 字节块 (仅 ~3ms，彻底避免常规 CPU 编解码与缓慢写盘)
+    let pixel_bytes_len = raw_rgba.len();
+    let file_size = 54 + pixel_bytes_len;
+    let mut bmp_buf = Vec::with_capacity(file_size);
+
+    // BMP Header (14 Bytes)
+    bmp_buf.extend_from_slice(b"BM");
+    bmp_buf.extend_from_slice(&(file_size as u32).to_le_bytes());
+    bmp_buf.extend_from_slice(&[0, 0, 0, 0]);
+    bmp_buf.extend_from_slice(&(54u32).to_le_bytes());
+
+    // DIB Header (BITMAPINFOHEADER 40 Bytes)
+    bmp_buf.extend_from_slice(&(40u32).to_le_bytes());
+    bmp_buf.extend_from_slice(&(width as i32).to_le_bytes());
+    bmp_buf.extend_from_slice(&(-(height as i32)).to_le_bytes()); // 负数代表 Top-Down
+    bmp_buf.extend_from_slice(&(1u16).to_le_bytes());
+    bmp_buf.extend_from_slice(&(32u16).to_le_bytes()); // 32-bit RGBA
+    bmp_buf.extend_from_slice(&(0u32).to_le_bytes()); // BI_RGB
+    bmp_buf.extend_from_slice(&(pixel_bytes_len as u32).to_le_bytes());
+    bmp_buf.extend_from_slice(&[0; 16]);
+
+    // 批量复制 RGBA 像素数据 (翻转 R/B 顺序为 BGRA 适配标准 BMP 规范)
+    for chunk in raw_rgba.chunks_exact(4) {
+        bmp_buf.push(chunk[2]); // B
+        bmp_buf.push(chunk[1]); // G
+        bmp_buf.push(chunk[0]); // R
+        bmp_buf.push(chunk[3]); // A
+    }
+
     let temp_dir = std::env::temp_dir();
     let file_path = temp_dir.join("zdream_screen_capture.bmp");
-
-    let file = std::fs::File::create(&file_path).map_err(|e| format!("无法创建临时截图文件: {}", e))?;
-    let mut writer = std::io::BufWriter::with_capacity(4 * 1024 * 1024, file);
-
-    image.write_to(&mut writer, image::ImageOutputFormat::Bmp)
-        .map_err(|e| format!("保存无损 BMP 失败: {}", e))?;
+    let mut file = std::fs::File::create(&file_path).map_err(|e| format!("无法创建截图文件: {}", e))?;
+    file.write_all(&bmp_buf).map_err(|e| format!("写入无损 BMP 失败: {}", e))?;
 
     let total = Instant::now();
     let path_str = file_path.to_string_lossy().to_string();
 
     println!(
-        "[Rust Native Capture] 屏幕截取: {:?} | 100%无损Bmp写盘({}): {:?} | 总计耗时: {:?}",
+        "[Rust Native Capture] 屏幕截取: {:?} | 向量化无损Bmp写盘({}): {:?} | 总计耗时: {:?}",
         t_enc.duration_since(t_cap),
         path_str,
         total.duration_since(t_enc),

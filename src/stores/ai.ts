@@ -77,17 +77,17 @@ export const PRESETS: Record<AiProvider, { name: string; baseUrl: string; model:
 
 export const ASR_PRESETS = [
   {
-    name: '通义千问官方 DashScope (qwen-audio-3.0-asr-flash)',
-    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    model: 'qwen-audio-3.0-asr-flash-filetrans',
+    name: '通义千问 Qwen-Audio 3.0 (qwen-audio-3.0-asr-flash)',
+    baseUrl: 'https://dashscope.aliyuncs.com/api/v1/services/audio/asr',
+    model: 'qwen-audio-3.0-asr-flash',
   },
   {
     name: '通义千问 SenseVoice 官方 (sensevoice-v1)',
-    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    baseUrl: 'https://dashscope.aliyuncs.com/api/v1/services/audio/asr',
     model: 'sensevoice-v1',
   },
   {
-    name: '硅基流动 SenseVoice (Qwen生态兼容端点)',
+    name: '硅基流动 SenseVoice (OpenAI 兼容端点)',
     baseUrl: 'https://api.siliconflow.cn/v1',
     model: 'FunAudioLLM/SenseVoiceSmall',
   },
@@ -350,11 +350,11 @@ ${contextInstruction}
   const testAsrError = ref('')
   const testAsrSuccess = ref('')
 
-  /** AI 语音转文字 (Whisper / 千问 ASR API) */
+  /** AI 语音转文字 (通义千问 Qwen-Audio 3.0 / Whisper API) */
   async function transcribeAudio(audioBlob: Blob): Promise<string> {
     let targetBaseUrl = (settings.value.whisperBaseUrl || '').trim().replace(/\/$/, '')
     let targetApiKey = (settings.value.whisperApiKey || '').trim()
-    const targetModel = (settings.value.whisperModel || 'qwen-audio-3.0-asr-flash-filetrans').trim()
+    const targetModel = (settings.value.whisperModel || 'qwen-audio-3.0-asr-flash').trim()
 
     // 如果未填 whisperBaseUrl，智能规避纯文本 AI 接口（如 DeepSeek/Moonshot/Ollama），防止 404
     if (!targetBaseUrl) {
@@ -362,7 +362,7 @@ ${contextInstruction}
       if (mainBase && !mainBase.includes('deepseek') && !mainBase.includes('moonshot') && !mainBase.includes('11434')) {
         targetBaseUrl = mainBase
       } else {
-        targetBaseUrl = 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+        targetBaseUrl = 'https://dashscope.aliyuncs.com/api/v1/services/audio/asr'
       }
     }
     if (!targetApiKey) {
@@ -375,110 +375,70 @@ ${contextInstruction}
       throw new Error(err)
     }
 
-    // 1. 优先尝试通义千问 DashScope 官方文件上传 + ASR 任务流水线
+    // 1. 通义千问 Qwen-Audio 3.0 官方 ASR 接口 (POST https://dashscope.aliyuncs.com/api/v1/services/audio/asr)
     if (targetBaseUrl.includes('dashscope.aliyuncs.com')) {
-      try {
-        logger.info('ai', `正在通过通义千问官方 DashScope 上传音频 Blob (${audioBlob.size} 字节)...`)
+      const dashUrl = 'https://dashscope.aliyuncs.com/api/v1/services/audio/asr'
+      logger.info('ai', `正在调用通义千问 Qwen-Audio 3.0 官方 ASR 接口 [${dashUrl}] (模型: ${targetModel})...`)
 
-        const uploadUrl = 'https://dashscope.aliyuncs.com/api/v1/files'
-        const uploadForm = new FormData()
-        uploadForm.append('file', audioBlob, 'voice.wav')
-        uploadForm.append('purpose', 'file-extract')
-
-        const authHeaders = { Authorization: `Bearer ${targetApiKey}` }
-        let uploadRes: Response
-        if (isTauri()) {
-          const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http')
-          uploadRes = (await tauriFetch(uploadUrl, {
-            method: 'POST',
-            headers: authHeaders,
-            body: uploadForm,
-            connectTimeout: 30000,
-          })) as unknown as Response
-        } else {
-          uploadRes = await fetch(uploadUrl, { method: 'POST', headers: authHeaders, body: uploadForm })
-        }
-
-        if (uploadRes.ok) {
-          const uploadData = (await uploadRes.json()) as { data?: { id?: string; url?: string }; file_url?: string }
-          const uploadedUrl = uploadData.data?.url || uploadData.file_url || (uploadData.data?.id ? `https://dashscope.oss-cn-beijing.aliyuncs.com/uploads/${uploadData.data.id}` : '')
-
-          if (uploadedUrl) {
-            logger.info('ai', `⚡ 通义千问 DashScope 官方文件上传成功: [${uploadedUrl}]，提交 ASR 识别任务...`)
-            const taskUrl = 'https://dashscope.aliyuncs.com/api/v1/services/audio/asr/transcription'
-            const modelName = targetModel.includes('filetrans') ? targetModel : 'qwen-audio-3.0-asr-flash-filetrans'
-            const taskBody = JSON.stringify({
-              model: modelName,
-              input: {
-                file_urls: [uploadedUrl],
-              },
-            })
-
-            const taskHeaders = {
-              Authorization: `Bearer ${targetApiKey}`,
-              'Content-Type': 'application/json',
-              'X-DashScope-Async': 'enable',
-            }
-
-            let taskSubmitRes: Response
-            if (isTauri()) {
-              const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http')
-              taskSubmitRes = (await tauriFetch(taskUrl, {
-                method: 'POST',
-                headers: taskHeaders,
-                body: taskBody,
-              })) as unknown as Response
-            } else {
-              taskSubmitRes = await fetch(taskUrl, { method: 'POST', headers: taskHeaders, body: taskBody })
-            }
-
-            if (taskSubmitRes.ok) {
-              const taskSubmitData = (await taskSubmitRes.json()) as { output?: { task_id?: string } }
-              if (taskSubmitData.output?.task_id) {
-                const taskId = taskSubmitData.output.task_id
-                logger.info('ai', `⚡ 通义千问官方 ASR 任务提交成功 (Task ID: ${taskId})，正在轮询结果...`)
-                const pollUrl = `https://dashscope.aliyuncs.com/api/v1/tasks/${taskId}`
-
-                for (let i = 0; i < 20; i++) {
-                  await new Promise((r) => setTimeout(r, 600))
-                  let pollRes: Response
-                  if (isTauri()) {
-                    const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http')
-                    pollRes = (await tauriFetch(pollUrl, { headers: authHeaders })) as unknown as Response
-                  } else {
-                    pollRes = await fetch(pollUrl, { headers: authHeaders })
-                  }
-                  if (pollRes.ok) {
-                    const pollData = (await pollRes.json()) as {
-                      output?: { task_status?: string; results?: Array<{ transcription_url?: string; text?: string }> }
-                    }
-                    if (pollData.output?.task_status === 'SUCCEEDED') {
-                      const resUrl = pollData.output.results?.[0]?.transcription_url
-                      if (resUrl) {
-                        const textRes = await fetch(resUrl)
-                        const textJson = await textRes.json()
-                        const extractedText = textJson.transcripts?.[0]?.text || ''
-                        logger.info('ai', `🎙️ 通义千问官方 ASR 转写成功: "${extractedText}"`)
-                        return extractedText.trim()
-                      }
-                      const extractedText = pollData.output.results?.[0]?.text || ''
-                      logger.info('ai', `🎙️ 通义千问官方 ASR 转写成功: "${extractedText}"`)
-                      return extractedText.trim()
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      } catch (dashErr) {
-        logger.warn('ai', 'DashScope 官方文件识别流程异常，降级到标准 OpenAI 模式', dashErr)
+      const arrayBuffer = await audioBlob.arrayBuffer()
+      const bytes = new Uint8Array(arrayBuffer)
+      let binary = ''
+      const chunk = 0x8000
+      for (let i = 0; i < bytes.length; i += chunk) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
       }
+      const base64Audio = btoa(binary)
+      const dataUrl = `data:audio/wav;base64,${base64Audio}`
+
+      const payload = {
+        model: targetModel.includes('asr') ? targetModel : 'qwen-audio-3.0-asr-flash',
+        input: {
+          file: dataUrl,
+        },
+      }
+
+      const headers = {
+        Authorization: `Bearer ${targetApiKey}`,
+        'Content-Type': 'application/json',
+      }
+
+      let res: Response
+      if (isTauri()) {
+        const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http')
+        res = (await tauriFetch(dashUrl, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload),
+          connectTimeout: 30000,
+        })) as unknown as Response
+      } else {
+        res = await fetch(dashUrl, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload),
+        })
+      }
+
+      if (!res.ok) {
+        const errText = await res.text()
+        const errMsg = `通义千问 ASR 识别失败 HTTP ${res.status}: ${errText.slice(0, 150)}`
+        logger.error('ai', errMsg)
+        throw new Error(errMsg)
+      }
+
+      const data = (await res.json()) as {
+        status_code?: number
+        output?: { transcription?: string; text?: string }
+      }
+
+      const text = (data.output?.transcription || data.output?.text || '').trim()
+      logger.info('ai', `🎙️ 通义千问 Qwen-Audio 3.0 识别成功结果: "${text}"`)
+      return text
     }
 
-    // 2. 降级方案：标准 OpenAI / 兼容模式 Form-Data 直传
-    const url = `${targetBaseUrl}/audio/transcriptions`
-    logger.info('ai', `正在发送语音 Blob (${audioBlob.size} 字节) 到 OpenAI 兼容 ASR 接口 [${url}] (模型: ${targetModel})...`)
+    // 2. OpenAI / 硅基流动 兼容模式 (Form Data)
+    const url = targetBaseUrl.endsWith('/audio/transcriptions') ? targetBaseUrl : `${targetBaseUrl}/audio/transcriptions`
+    logger.info('ai', `正在发送语音 Blob 到 OpenAI 兼容 ASR 接口 [${url}] (模型: ${targetModel})...`)
 
     const formData = new FormData()
     formData.append('file', audioBlob, 'voice.wav')
