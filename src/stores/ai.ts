@@ -376,7 +376,10 @@ ${contextInstruction}
     }
 
     try {
-      const url = `${targetBaseUrl}/audio/transcriptions`
+      let url = `${targetBaseUrl}/audio/transcriptions`
+      if (targetBaseUrl.includes('dashscope.aliyuncs.com') && !targetBaseUrl.includes('compatible-mode')) {
+        url = 'https://dashscope.aliyuncs.com/api/v1/services/audio/asr/transcription'
+      }
       logger.info('ai', `正在发送语音 Blob (${audioBlob.size} 字节) 到 ASR 接口 [${url}] (模型: ${targetModel})...`)
 
       const formData = new FormData()
@@ -386,6 +389,9 @@ ${contextInstruction}
       const headers: Record<string, string> = {}
       if (targetApiKey) {
         headers['Authorization'] = `Bearer ${targetApiKey}`
+      }
+      if (targetBaseUrl.includes('dashscope')) {
+        headers['X-DashScope-Async'] = 'enable'
       }
 
       let res: Response
