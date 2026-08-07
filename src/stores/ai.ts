@@ -391,6 +391,8 @@ ${contextInstruction}
       const dataUrl = `data:audio/wav;base64,${base64Audio}`
 
       const payload = {
+        task: 'asr',
+        function: 'transcription',
         model: targetModel.includes('asr') ? targetModel : 'qwen-audio-3.0-asr-flash',
         input: {
           file: dataUrl,

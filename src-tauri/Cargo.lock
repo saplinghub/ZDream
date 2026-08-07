@@ -6680,7 +6680,7 @@ dependencies = [
 
 [[package]]
 name = "zdream"
-version = "0.4.68"
+version = "0.4.69"
 dependencies = [
  "base64 0.21.7",
  "image 0.24.9",
