@@ -4,7 +4,6 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri_plugin_sql::{Migration, MigrationKind};
 use std::sync::{Mutex, OnceLock};
 
-#[cfg(target_os = "macos")]
 use tauri::WebviewUrl;
 
 /// 最近一次全屏截图缓存，供 crop_screen_region 复用，避免"预览截一次 + 裁剪再截一次"的重复截屏
@@ -283,6 +282,31 @@ pub fn run() {
                         let _: () = msg_send![ns_win, setStyleMask: current_mask | 128u64];
                     }
                 }
+            }
+
+            // 预创建隐藏截图窗口（跨平台）：Ctrl+A 时前端直接 show，
+            // 避免 WebView2 首次创建慢（Windows ~1s）
+            {
+                let (cw, ch) = match app.primary_monitor().ok().flatten() {
+                    Some(m) => {
+                        let scale = m.scale_factor().max(0.5);
+                        (m.size().width as f64 / scale, m.size().height as f64 / scale)
+                    }
+                    None => (1920.0, 1080.0),
+                };
+                let _ = tauri::WebviewWindowBuilder::new(
+                    app,
+                    "capture",
+                    WebviewUrl::App("/#/capture".into()),
+                )
+                .title("截图")
+                .inner_size(cw, ch)
+                .decorations(false)
+                .transparent(true)
+                .always_on_top(true)
+                .skip_taskbar(true)
+                .visible(false)
+                .build();
             }
             Ok(())
         })

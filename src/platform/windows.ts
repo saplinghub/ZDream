@@ -91,11 +91,15 @@ export async function precreateCaptureWindow(): Promise<void> {
     const { getAllWebviewWindows, WebviewWindow } = await import('@tauri-apps/api/webviewWindow')
     const { currentMonitor, primaryMonitor } = await import('@tauri-apps/api/window')
     const all = await getAllWebviewWindows()
-    if (all.some((w: { label: string }) => w.label === CAPTURE_WINDOW)) return
+    if (all.some((w: { label: string }) => w.label === CAPTURE_WINDOW)) {
+      console.log('[windows] precreateCaptureWindow: 已存在，跳过')
+      return
+    }
     const monitor = (await currentMonitor()) || (await primaryMonitor())
     const factor = monitor?.scaleFactor || 1
     const width = monitor ? Math.round(monitor.size.width / factor) : 1920
     const height = monitor ? Math.round(monitor.size.height / factor) : 1080
+    console.log('[windows] precreateCaptureWindow: 创建隐藏截图窗口', { width, height, url: floatUrl('/capture') })
     const w = new WebviewWindow(CAPTURE_WINDOW, {
       url: floatUrl('/capture'),
       title: '截图',
@@ -112,7 +116,10 @@ export async function precreateCaptureWindow(): Promise<void> {
       visible: false, // 隐藏预创建，首次 Ctrl+A 时 openCaptureWindow 直接 show
     })
     await new Promise<void>((resolve, reject) => {
-      w.once('tauri://created', () => resolve())
+      w.once('tauri://created', () => {
+        console.log('[windows] precreateCaptureWindow: 创建成功')
+        resolve()
+      })
       w.once('tauri://error', (e: unknown) => reject(e))
     })
   } catch (e) {
@@ -129,11 +136,13 @@ export async function openCaptureWindow(): Promise<void> {
     const all = await getAllWebviewWindows()
     const existing = all.find((w: { label: string }) => w.label === CAPTURE_WINDOW)
     if (existing) {
+      console.log('[windows] openCaptureWindow: 复用已有窗口', existing.label)
       await existing.show()
       await existing.setFocus()
       await existing.setAlwaysOnTop(true)
       return
     }
+    console.log('[windows] openCaptureWindow: 未找到已有窗口，正在新建')
 
     const monitor = (await currentMonitor()) || (await primaryMonitor())
     const factor = monitor?.scaleFactor || 1

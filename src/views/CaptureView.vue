@@ -268,7 +268,9 @@ async function closeWin() {
     const win = getCurrentWebviewWindow()
     // 仅隐藏保留窗口，供下次 Ctrl+A 复用（配合启动预创建，省去每次约 200ms 的窗口创建）
     await win.hide().catch(() => {})
-  } catch {
+    console.log('[CaptureView] closeWin: 已 hide 保留窗口，下次复用')
+  } catch (e) {
+    console.warn('[CaptureView] closeWin: hide 失败，回退 window.close', e)
     window.close()
   }
 }
