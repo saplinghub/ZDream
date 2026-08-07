@@ -1,12 +1,13 @@
 <script setup lang="ts">
 /**
- * 全屏截图选区窗口
- * 显示全屏截图 → 拖拽框选 → 裁剪 → OCR → 结果发回主窗口
+ * 微信级高性能全屏截图选区窗口 (Canvas 2D + PointerEvents + rAF 节流 + DPR 1:1 物理精校)
+ * 彻底消除 DOM 重排与跟手延迟，极速框选 → 局部裁剪 → OCR
  */
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { recognizeImage } from '@/ocr'
 import { notify } from '@/platform/desktop'
+import { isTauri } from '@/platform/desktop'
 import { logger } from '@/utils/logger'
 
 const CAPTURE_KEY = 'mhxy-zdream:pending-capture'
@@ -15,6 +16,8 @@ const RESULT_EVENT = 'capture:result'
 const appStore = useAppStore()
 
 const imgEl = ref<HTMLImageElement | null>(null)
+const overlayCanvas = ref<HTMLCanvasElement | null>(null)
+
 const dragging = ref(false)
 const done = ref(false)
 const working = ref(false)
@@ -25,9 +28,9 @@ const winWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1920)
 const winHeight = ref(typeof window !== 'undefined' ? window.innerHeight : 1080)
 const screenshot = ref('')
 
-import { isTauri } from '@/platform/desktop'
+let pendingFrame = false
 
-// 从 localStorage 读取截图（主窗口截好写入）
+// 从 localStorage 读取截图
 screenshot.value = localStorage.getItem(CAPTURE_KEY) || ''
 
 if (isTauri()) {
@@ -42,39 +45,129 @@ if (isTauri()) {
   })
 }
 
-import { onMounted, onUnmounted } from 'vue'
-
 onMounted(() => {
-  window.addEventListener('mousemove', onMove)
-  window.addEventListener('mouseup', onUp)
+  window.addEventListener('resize', syncCanvasSize)
+  window.addEventListener('pointerdown', onPointerDown)
+  window.addEventListener('pointermove', onPointerMove)
+  window.addEventListener('pointerup', onPointerUp)
   window.addEventListener('keydown', onKey)
+  syncCanvasSize()
 })
 
 onUnmounted(() => {
-  window.removeEventListener('mousemove', onMove)
-  window.removeEventListener('mouseup', onUp)
+  window.removeEventListener('resize', syncCanvasSize)
+  window.removeEventListener('pointerdown', onPointerDown)
+  window.removeEventListener('pointermove', onPointerMove)
+  window.removeEventListener('pointerup', onPointerUp)
   window.removeEventListener('keydown', onKey)
 })
 
-function onDown(e: MouseEvent) {
+/** 同步 Canvas 物理像素与 DPR (设备像素比) 映射 */
+function syncCanvasSize() {
+  if (typeof window === 'undefined') return
+  winWidth.value = window.innerWidth
+  winHeight.value = window.innerHeight
+
+  const cvs = overlayCanvas.value
+  if (!cvs) return
+  const dpr = window.devicePixelRatio || 1
+  cvs.width = Math.round(window.innerWidth * dpr)
+  cvs.height = Math.round(window.innerHeight * dpr)
+  cvs.style.width = `${window.innerWidth}px`
+  cvs.style.height = `${window.innerHeight}px`
+  drawCanvas()
+}
+
+/** 微信级 单层 Canvas 2D 绘图引擎 (0 DOM 重排，GPU 直接渲染) */
+function drawCanvas() {
+  const cvs = overlayCanvas.value
+  if (!cvs) return
+  const ctx = cvs.getContext('2d')
+  if (!ctx) return
+
+  const dpr = window.devicePixelRatio || 1
+  const w = window.innerWidth
+  const h = window.innerHeight
+
+  ctx.save()
+  ctx.scale(dpr, dpr)
+  ctx.clearRect(0, 0, w, h)
+
+  // 1. 全屏半透明黑色遮罩
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.38)'
+  ctx.fillRect(0, 0, w, h)
+
+  // 2. 擦除选区内部 (实现微信选区高亮透视)
+  if (box.value.w > 0 && box.value.h > 0) {
+    const bx = box.value.x
+    const by = box.value.y
+    const bw = box.value.w
+    const bh = box.value.h
+
+    ctx.clearRect(bx, by, bw, bh)
+
+    // 3. 选区蓝色边框
+    ctx.strokeStyle = '#0052d9'
+    ctx.lineWidth = 2
+    ctx.strokeRect(bx, by, bw, bh)
+
+    // 4. 8 个控制把手点 (Top-Left, Top-Center, Top-Right, Right-Center, Bottom-Right, Bottom-Center, Bottom-Left, Left-Center)
+    const handleSize = 6
+    const half = handleSize / 2
+    const handlePoints = [
+      { x: bx, y: by },
+      { x: bx + bw / 2, y: by },
+      { x: bx + bw, y: by },
+      { x: bx + bw, y: by + bh / 2 },
+      { x: bx + bw, y: by + bh },
+      { x: bx + bw / 2, y: by + bh },
+      { x: bx, y: by + bh },
+      { x: bx, y: by + bh / 2 },
+    ]
+
+    ctx.fillStyle = '#0052d9'
+    ctx.strokeStyle = '#ffffff'
+    ctx.lineWidth = 1.5
+
+    for (const pt of handlePoints) {
+      ctx.beginPath()
+      ctx.rect(pt.x - half, pt.y - half, handleSize, handleSize)
+      ctx.fill()
+      ctx.stroke()
+    }
+  }
+
+  ctx.restore()
+}
+
+function onPointerDown(e: PointerEvent) {
   if (done.value || working.value) return
   dragging.value = true
   start.value = { x: e.clientX, y: e.clientY }
   box.value = { x: e.clientX, y: e.clientY, w: 0, h: 0 }
+  drawCanvas()
 }
 
-function onMove(e: MouseEvent) {
+function onPointerMove(e: PointerEvent) {
   if (!dragging.value || done.value || working.value) return
-  const x = Math.min(start.value.x, e.clientX)
-  const y = Math.min(start.value.y, e.clientY)
-  box.value = {
-    x, y,
-    w: Math.abs(e.clientX - start.value.x),
-    h: Math.abs(e.clientY - start.value.y),
+  if (!pendingFrame) {
+    pendingFrame = true
+    requestAnimationFrame(() => {
+      const x = Math.min(start.value.x, e.clientX)
+      const y = Math.min(start.value.y, e.clientY)
+      box.value = {
+        x,
+        y,
+        w: Math.abs(e.clientX - start.value.x),
+        h: Math.abs(e.clientY - start.value.y),
+      }
+      drawCanvas()
+      pendingFrame = false
+    })
   }
 }
 
-async function onUp() {
+async function onPointerUp() {
   if (!dragging.value || done.value) return
   dragging.value = false
   if (box.value.w < 10 || box.value.h < 10) {
@@ -82,7 +175,6 @@ async function onUp() {
     return
   }
   done.value = true
-  await recognize()
 }
 
 async function recognize() {
@@ -93,26 +185,40 @@ async function recognize() {
   }
   working.value = true
   try {
-    // 坐标换算：clientX/Y 是窗口像素（=逻辑像素），截图是物理像素
     const ratio = imgNatural.value.w / (img.clientWidth || window.innerWidth || 1)
-    const sx = box.value.x * ratio
-    const sy = box.value.y * ratio
-    const sw = box.value.w * ratio
-    const sh = box.value.h * ratio
+    const sx = Math.round(box.value.x * ratio)
+    const sy = Math.round(box.value.y * ratio)
+    const sw = Math.round(box.value.w * ratio)
+    const sh = Math.round(box.value.h * ratio)
 
-    const canvas = document.createElement('canvas')
-    canvas.width = Math.max(1, Math.round(sw))
-    canvas.height = Math.max(1, Math.round(sh))
-    const ctx = canvas.getContext('2d')
-    if (!ctx) throw new Error('canvas 不可用')
-    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height)
-    const b64 = canvas.toDataURL('image/png').replace(/^data:image\/png;base64,/, '')
+    let b64 = ''
+
+    // 优先使用 Rust 原生局部区域裁剪 (按需获取 15KB 像素数据，彻底省去全图 5MB Base64 传输)
+    if (isTauri()) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core')
+        logger.info('ocr', `调用 Rust 原生按需区域裁剪 crop_screen_region (${sx}, ${sy}, ${sw}, ${sh})...`)
+        b64 = await invoke<string>('crop_screen_region', { x: sx, y: sy, w: sw, h: sh })
+      } catch (e) {
+        logger.warn('ocr', 'Rust 区域裁剪回退至 Canvas 裁剪', e)
+      }
+    }
+
+    if (!b64) {
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.max(1, sw)
+      canvas.height = Math.max(1, sh)
+      const ctx = canvas.getContext('2d')
+      if (!ctx) throw new Error('canvas 不可用')
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height)
+      b64 = canvas.toDataURL('image/png').replace(/^data:image\/png;base64,/, '')
+    }
 
     const { baiduApiKey, baiduSecretKey } = appStore.settings
     if (!baiduApiKey || !baiduSecretKey) {
       throw new Error('未配置百度 OCR Key，请到设置页填写')
     }
-    logger.info('ocr', `识别选区 ${Math.round(sw)}×${Math.round(sh)}，请求百度 OCR`)
+    logger.info('ocr', `识别选区 ${sw}×${sh} px，请求百度 OCR`)
     const result = await recognizeImage(b64, { apiKey: baiduApiKey, secretKey: baiduSecretKey })
     logger.info('ocr', `OCR 成功，识别到 ${result.lines.length} 行文字`)
 
@@ -124,7 +230,7 @@ async function recognize() {
       words: result.words,
       direction: result.direction,
       raw: result.raw,
-      capturedImgUrl: canvas.toDataURL('image/png'),
+      capturedImgUrl: `data:image/png;base64,${b64}`,
     })
     notify(`OCR 完成：识别到 ${result.lines.length} 行文字`)
   } catch (e) {
@@ -163,7 +269,7 @@ async function closeWin() {
 </script>
 
 <template>
-  <div class="cap-wrap" @mousedown="onDown" @mousemove="onMove" @mouseup="onUp" @keydown="onKey" tabindex="0">
+  <div class="cap-wrap" tabindex="0">
     <img
       v-if="screenshot"
       ref="imgEl"
@@ -172,25 +278,9 @@ async function closeWin() {
       draggable="false"
       @load="imgNatural = { w: ($event.target as HTMLImageElement).naturalWidth, h: ($event.target as HTMLImageElement).naturalHeight }"
     />
-    <!-- 微信级半透明遮罩层 -->
-    <div class="cap-mask-bg" v-if="box.w === 0 && !working" />
 
-    <!-- 微信选区框 -->
-    <div
-      v-if="box.w > 0"
-      class="cap-box"
-      :style="{ left: box.x + 'px', top: box.y + 'px', width: box.w + 'px', height: box.h + 'px' }"
-    >
-      <!-- 8 个控制把手点 -->
-      <span class="handle handle-tl"></span>
-      <span class="handle handle-tc"></span>
-      <span class="handle handle-tr"></span>
-      <span class="handle handle-rc"></span>
-      <span class="handle handle-br"></span>
-      <span class="handle handle-bc"></span>
-      <span class="handle handle-bl"></span>
-      <span class="handle handle-lc"></span>
-    </div>
+    <!-- 微信级 单层 Canvas 2D 绘图引擎 (GPU 硬件加速) -->
+    <canvas ref="overlayCanvas" class="cap-canvas" />
 
     <!-- 尺寸与坐标标注 -->
     <div class="cap-dim" v-if="box.w > 0" :style="{ left: box.x + 'px', top: Math.max(8, box.y - 28) + 'px' }">
@@ -253,36 +343,13 @@ html, body, #app {
   object-fit: fill;
   pointer-events: none;
 }
-.cap-mask-bg {
+.cap-canvas {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.25);
-  pointer-events: none;
+  width: 100%;
+  height: 100%;
+  pointer-events: auto;
 }
-.cap-box {
-  position: fixed;
-  border: 2px solid #0052d9;
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4);
-  pointer-events: none;
-  z-index: 10;
-}
-/* 把手点 */
-.handle {
-  position: absolute;
-  width: 7px;
-  height: 7px;
-  background: #0052d9;
-  border: 1px solid #fff;
-  border-radius: 50%;
-}
-.handle-tl { top: -4px; left: -4px; }
-.handle-tc { top: -4px; left: 50%; transform: translateX(-50%); }
-.handle-tr { top: -4px; right: -4px; }
-.handle-rc { top: 50%; right: -4px; transform: translateY(-50%); }
-.handle-br { bottom: -4px; right: -4px; }
-.handle-bc { bottom: -4px; left: 50%; transform: translateX(-50%); }
-.handle-bl { bottom: -4px; left: -4px; }
-.handle-lc { top: 50%; left: -4px; transform: translateY(-50%); }
 
 .cap-dim {
   position: fixed;

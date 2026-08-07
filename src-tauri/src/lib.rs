@@ -35,6 +35,32 @@ fn capture_full_screen() -> Result<String, String> {
     Ok(b64)
 }
 
+#[tauri::command]
+fn crop_screen_region(x: u32, y: u32, w: u32, h: u32) -> Result<String, String> {
+    use base64::Engine;
+    use std::io::Cursor;
+
+    let screens = screenshots::Screen::all().map_err(|e| format!("未找到可用显示器: {}", e))?;
+    if screens.is_empty() {
+        return Err("未检测到显示器设备".to_string());
+    }
+
+    let screen = screens.into_iter().find(|s| s.display_info.is_primary).unwrap_or_else(|| {
+        screenshots::Screen::all().unwrap().remove(0)
+    });
+
+    let full_image = screen.capture().map_err(|e| format!("原生截图捕获失败: {}", e))?;
+    let cropped = image::imageops::crop_imm(&full_image, x, y, w, h).to_image();
+
+    let mut png_bytes = Vec::new();
+    let mut cursor = Cursor::new(&mut png_bytes);
+    cropped.write_to(&mut cursor, image::ImageOutputFormat::Png)
+        .map_err(|e| format!("选区图片编码 PNG 失败: {}", e))?;
+
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&png_bytes);
+    Ok(b64)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let migrations = vec![Migration {
@@ -45,7 +71,7 @@ pub fn run() {
     }];
 
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![log_to_terminal, capture_full_screen])
+        .invoke_handler(tauri::generate_handler![log_to_terminal, capture_full_screen, crop_screen_region])
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
