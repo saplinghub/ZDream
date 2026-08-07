@@ -34,12 +34,17 @@ export async function captureScreen(): Promise<CaptureResult> {
   try {
     const { isTauri } = await import('@/platform/desktop')
     if (isTauri()) {
-      const { invoke } = await import('@tauri-apps/api/core')
+      const { invoke, convertFileSrc } = await import('@tauri-apps/api/core')
       logger.info('capture', '尝试调用 Rust 原生极速截图 (capture_full_screen)...')
-      const base64 = await invoke<string>('capture_full_screen')
-      if (base64 && base64.length > 100) {
-        logger.info('capture', `⚡ Rust 原生截图成功！base64 长度: ${base64.length}`)
-        return { base64, filePath: '' }
+      const result = await invoke<string>('capture_full_screen')
+      if (result) {
+        if (result.startsWith('/') || result.includes(':\\') || result.includes('zdream')) {
+          const fileSrc = convertFileSrc(result)
+          logger.info('capture', `⚡ Rust 原生截图无损保存路径: ${result} | Asset URL: ${fileSrc}`)
+          return { base64: fileSrc, filePath: result }
+        }
+        logger.info('capture', `⚡ Rust 原生截图成功！数据长度: ${result.length}`)
+        return { base64: result, filePath: '' }
       }
     }
   } catch (nativeErr) {

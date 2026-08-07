@@ -40,7 +40,9 @@ export async function runOcrCapture(): Promise<void> {
     const t2 = performance.now()
     logger.info('ocr', `⏱️ [T1 -> T2] captureScreen 完成 | 耗时: ${(t2 - t1).toFixed(1)}ms | base64长度: ${shot.base64.length}`)
 
-    const dataUrl = shot.base64.startsWith('data:') ? shot.base64 : `data:image/bmp;base64,${shot.base64}`
+    const dataUrl = (shot.base64.startsWith('data:') || shot.base64.startsWith('http') || shot.base64.startsWith('asset:'))
+      ? shot.base64
+      : `data:image/png;base64,${shot.base64}`
     ocrStore.screenshot = dataUrl
 
     const t3 = performance.now()

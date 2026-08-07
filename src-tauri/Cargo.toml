@@ -1,6 +1,6 @@
 [package]
 name = "zdream"
-version = "0.4.65"
+version = "0.4.66"
 description = "ZDream desktop app"
 authors = ["saplinghub"]
 edition = "2021"

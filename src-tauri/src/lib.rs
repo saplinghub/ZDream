@@ -13,8 +13,6 @@ fn log_to_terminal(level: String, tag: String, msg: String) {
 
 #[tauri::command]
 fn capture_full_screen() -> Result<String, String> {
-    use base64::Engine;
-    use std::io::Cursor;
     use std::time::Instant;
 
     let start = Instant::now();
@@ -31,48 +29,33 @@ fn capture_full_screen() -> Result<String, String> {
     let image = screen.capture().map_err(|e| format!("原生截图捕获失败: {}", e))?;
     let t_enc = Instant::now();
 
-    let (width, height) = (image.width() as usize, image.height() as usize);
+    // 保存 100% 无损 1:1 物理像素到临时文件，采用 Png Fast 压缩 (避免模糊与 Base64 IPC 大文件卡顿)
+    let temp_dir = std::env::temp_dir();
+    let file_path = temp_dir.join("zdream_screen_capture.png");
 
-    // 超高速 1D 线性步长 2x 降采样 (0.8ms 极速，取代耗时 1.8s 的纯 CPU 像素插值)
-    let display_img = if width > 1920 || height > 1080 {
-        let target_width = width / 2;
-        let target_height = height / 2;
-        let mut downsampled = Vec::with_capacity(target_width * target_height * 4);
-        let raw_pixels = image.as_raw();
+    let file = std::fs::File::create(&file_path).map_err(|e| format!("无法创建临时截图文件: {}", e))?;
+    let mut writer = std::io::BufWriter::new(file);
 
-        for y in (0..height).step_by(2) {
-            let row_start = y * width * 4;
-            for x in (0..width).step_by(2) {
-                let idx = row_start + x * 4;
-                if idx + 3 < raw_pixels.len() {
-                    downsampled.extend_from_slice(&raw_pixels[idx..idx + 4]);
-                }
-            }
-        }
-        image::RgbaImage::from_raw(target_width as u32, target_height as u32, downsampled).unwrap_or(image)
-    } else {
-        image
-    };
+    let encoder = image::codecs::png::PngEncoder::new_with_quality(
+        &mut writer,
+        image::codecs::png::CompressionType::Fast,
+        image::codecs::png::FilterType::NoFilter,
+    );
 
-    let mut jpg_bytes = Vec::new();
-    let mut cursor = Cursor::new(&mut jpg_bytes);
-    display_img.write_to(&mut cursor, image::ImageOutputFormat::Jpeg(70))
-        .map_err(|e| format!("全屏背景图片编码 Jpeg 失败: {}", e))?;
+    image.write_with_encoder(encoder).map_err(|e| format!("保存无损 PNG 失败: {}", e))?;
 
-    let t_b64 = Instant::now();
-    let b64 = base64::engine::general_purpose::STANDARD.encode(&jpg_bytes);
     let total = Instant::now();
+    let path_str = file_path.to_string_lossy().to_string();
 
     println!(
-        "[Rust Native Capture] 屏幕截取: {:?} | 0.8ms线性降采样+Jpeg(70): {:?} | Base64编码(大小: {} KB): {:?} | 总计耗时: {:?}",
+        "[Rust Native Capture] 屏幕截取: {:?} | 100%无损Fast-PNG写入文件({}): {:?} | 总计耗时: {:?}",
         t_enc.duration_since(t_cap),
-        t_b64.duration_since(t_enc),
-        jpg_bytes.len() / 1024,
-        total.duration_since(t_b64),
+        path_str,
+        total.duration_since(t_enc),
         total.duration_since(start)
     );
 
-    Ok(b64)
+    Ok(path_str)
 }
 
 #[tauri::command]

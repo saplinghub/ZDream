@@ -77,27 +77,27 @@ export const PRESETS: Record<AiProvider, { name: string; baseUrl: string; model:
 
 export const ASR_PRESETS = [
   {
-    name: '通义千问 ASR (qwen-audio-3.0-asr-flash 兼容模式)',
-    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    model: 'qwen-audio-3.0-asr-flash',
-  },
-  {
-    name: '通义千问 ASR (qwen3-asr-flash 兼容模式)',
-    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    model: 'qwen3-asr-flash',
-  },
-  {
-    name: '通义千问 ASR (DashScope 原生服务)',
-    baseUrl: 'https://dashscope.aliyuncs.com/api/v1/services/audio/asr/transcription',
-    model: 'qwen-audio-3.0-asr-flash',
-  },
-  {
-    name: '硅基流动 SenseVoice (Qwen 生态)',
+    name: '硅基流动 SenseVoice (Qwen生态/推荐免异步)',
     baseUrl: 'https://api.siliconflow.cn/v1',
     model: 'FunAudioLLM/SenseVoiceSmall',
   },
   {
-    name: 'OpenAI Whisper',
+    name: '通义千问 SenseVoice 官方 (sensevoice-v1)',
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    model: 'sensevoice-v1',
+  },
+  {
+    name: '通义千问 ASR (qwen-audio-3.0-asr-flash)',
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    model: 'qwen-audio-3.0-asr-flash',
+  },
+  {
+    name: '通义千问 ASR (DashScope 原生 JSON 服务)',
+    baseUrl: 'https://dashscope.aliyuncs.com/api/v1/services/audio/asr/transcription',
+    model: 'qwen-audio-3.0-asr-flash',
+  },
+  {
+    name: 'OpenAI Whisper-1',
     baseUrl: 'https://api.openai.com/v1',
     model: 'whisper-1',
   },
