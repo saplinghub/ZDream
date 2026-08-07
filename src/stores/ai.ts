@@ -396,16 +396,37 @@ ${contextInstruction}
       try {
         logger.info('ai', `正在发送语音 Blob (${audioBlob.size} 字节) 到 ASR 接口 [${url}] (模型: ${targetModel})...`)
 
-        const formData = new FormData()
-        formData.append('file', audioBlob, 'voice.wav')
-        formData.append('model', targetModel)
-
+        let reqBody: BodyInit
         const headers: Record<string, string> = {}
         if (targetApiKey) {
           headers['Authorization'] = `Bearer ${targetApiKey}`
         }
-        if (url.includes('dashscope')) {
+
+        if (url.includes('/services/audio/asr/transcription')) {
+          headers['Content-Type'] = 'application/json'
           headers['X-DashScope-Async'] = 'enable'
+
+          const arrayBuffer = await audioBlob.arrayBuffer()
+          const bytes = new Uint8Array(arrayBuffer)
+          let binary = ''
+          const chunk = 0x8000
+          for (let i = 0; i < bytes.length; i += chunk) {
+            binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
+          }
+          const base64Audio = btoa(binary)
+          const dataUrl = `data:audio/wav;base64,${base64Audio}`
+
+          reqBody = JSON.stringify({
+            model: targetModel,
+            input: {
+              file: dataUrl,
+            },
+          })
+        } else {
+          const formData = new FormData()
+          formData.append('file', audioBlob, 'voice.wav')
+          formData.append('model', targetModel)
+          reqBody = formData
         }
 
         let res: Response
@@ -414,14 +435,14 @@ ${contextInstruction}
           res = (await tauriFetch(url, {
             method: 'POST',
             headers,
-            body: formData,
+            body: reqBody,
             connectTimeout: 30000,
           })) as unknown as Response
         } else {
           res = await fetch(url, {
             method: 'POST',
             headers,
-            body: formData,
+            body: reqBody,
           })
         }
 
