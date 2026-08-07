@@ -448,7 +448,11 @@ ${contextInstruction}
 
         if (!res.ok) {
           const errText = await res.text()
-          lastErr = `ASR 识别失败 HTTP ${res.status}: ${errText.slice(0, 150)}`
+          if (errText.includes('url error') || errText.includes('InvalidParameter')) {
+            lastErr = `阿里云 DashScope 官方非实时 ASR 强制要求公网 HTTP/HTTPS 音频 URL（不支持本地录音直传）。客户端实时录音请使用【硅基流动 SenseVoice (Qwen生态)】或【OpenAI Whisper】预设。`
+          } else {
+            lastErr = `ASR 识别失败 HTTP ${res.status}: ${errText.slice(0, 150)}`
+          }
           logger.warn('ai', `${lastErr} (尝试下一端点...)`)
           continue
         }
