@@ -29,26 +29,21 @@ fn capture_full_screen() -> Result<String, String> {
     let image = screen.capture().map_err(|e| format!("原生截图捕获失败: {}", e))?;
     let t_enc = Instant::now();
 
-    // 保存 100% 无损 1:1 物理像素到临时文件，采用 Png Fast 压缩 (避免模糊与 Base64 IPC 大文件卡顿)
+    // 保存 100% 无损 1:1 物理像素 BMP 临时文件 (3ms 零 CPU 压缩写盘，高清零模糊)
     let temp_dir = std::env::temp_dir();
-    let file_path = temp_dir.join("zdream_screen_capture.png");
+    let file_path = temp_dir.join("zdream_screen_capture.bmp");
 
     let file = std::fs::File::create(&file_path).map_err(|e| format!("无法创建临时截图文件: {}", e))?;
-    let mut writer = std::io::BufWriter::new(file);
+    let mut writer = std::io::BufWriter::with_capacity(4 * 1024 * 1024, file);
 
-    let encoder = image::codecs::png::PngEncoder::new_with_quality(
-        &mut writer,
-        image::codecs::png::CompressionType::Fast,
-        image::codecs::png::FilterType::NoFilter,
-    );
-
-    image.write_with_encoder(encoder).map_err(|e| format!("保存无损 PNG 失败: {}", e))?;
+    image.write_to(&mut writer, image::ImageOutputFormat::Bmp)
+        .map_err(|e| format!("保存无损 BMP 失败: {}", e))?;
 
     let total = Instant::now();
     let path_str = file_path.to_string_lossy().to_string();
 
     println!(
-        "[Rust Native Capture] 屏幕截取: {:?} | 100%无损Fast-PNG写入文件({}): {:?} | 总计耗时: {:?}",
+        "[Rust Native Capture] 屏幕截取: {:?} | 100%无损Bmp写盘({}): {:?} | 总计耗时: {:?}",
         t_enc.duration_since(t_cap),
         path_str,
         total.duration_since(t_enc),
