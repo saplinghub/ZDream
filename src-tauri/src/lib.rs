@@ -26,12 +26,12 @@ fn capture_full_screen() -> Result<String, String> {
     });
 
     let image = screen.capture().map_err(|e| format!("原生截图捕获失败: {}", e))?;
-    let mut png_bytes = Vec::new();
-    let mut cursor = Cursor::new(&mut png_bytes);
-    image.write_to(&mut cursor, image::ImageOutputFormat::Png)
-        .map_err(|e| format!("图片编码 PNG 失败: {}", e))?;
+    let mut jpg_bytes = Vec::new();
+    let mut cursor = Cursor::new(&mut jpg_bytes);
+    image.write_to(&mut cursor, image::ImageOutputFormat::Jpeg(85))
+        .map_err(|e| format!("全屏图片编码 Jpeg 失败: {}", e))?;
 
-    let b64 = base64::engine::general_purpose::STANDARD.encode(&png_bytes);
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&jpg_bytes);
     Ok(b64)
 }
 

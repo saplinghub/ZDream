@@ -95,6 +95,7 @@ export async function openCaptureWindow(): Promise<void> {
     if (existing) {
       await existing.show()
       await existing.setFocus()
+      await existing.setAlwaysOnTop(true)
       return
     }
 
@@ -116,11 +117,17 @@ export async function openCaptureWindow(): Promise<void> {
       shadow: false,
       alwaysOnTop: true,
       skipTaskbar: true,
+      acceptFirstMouse: true,
       focus: true,
       visible: true,
     })
     await new Promise<void>((resolve, reject) => {
-      w.once('tauri://created', () => resolve())
+      w.once('tauri://created', async () => {
+        await w.show()
+        await w.setFocus()
+        await w.setAlwaysOnTop(true)
+        resolve()
+      })
       w.once('tauri://error', (e: unknown) => reject(e))
     })
   } catch (e) {

@@ -36,7 +36,7 @@ export async function runOcrCapture(): Promise<void> {
   try {
     const shot = await captureScreen()
     logger.info('ocr', `截图完成 ${shot.base64.length} 字符 base64`)
-    const dataUrl = `data:image/png;base64,${shot.base64}`
+    const dataUrl = shot.base64.startsWith('data:') ? shot.base64 : `data:image/jpeg;base64,${shot.base64}`
     ocrStore.screenshot = dataUrl
 
     try {
